@@ -1,0 +1,9 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "settings-capability",
+  "description": "Permissões da janela de configuração do launcher",
+  "windows": ["settings"],
+  "permissions": [
+    "dialog:allow-open"
+  ]
+}
