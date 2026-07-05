@@ -1,0 +1,72 @@
+{
+  "shortcut": "Ctrl+Space",
+  "items": [
+    {
+      "id": "notepad",
+      "label": "Bloco de notas",
+      "hint": "Programa",
+      "icon": "N",
+      "accent": "#8b7cff",
+      "action": {
+        "type": "program",
+        "path": "C:\\Windows\\System32\\notepad.exe"
+      }
+    },
+    {
+      "id": "calculator",
+      "label": "Calculadora",
+      "hint": "Programa",
+      "icon": "C",
+      "accent": "#55d6be",
+      "action": {
+        "type": "program",
+        "path": "C:\\Windows\\System32\\calc.exe"
+      }
+    },
+    {
+      "id": "terminal",
+      "label": "Terminal",
+      "hint": "Programa",
+      "icon": ">_",
+      "accent": "#61a8ff",
+      "action": {
+        "type": "program",
+        "path": "C:\\Windows\\System32\\cmd.exe"
+      }
+    },
+    {
+      "id": "users",
+      "label": "Usuários",
+      "hint": "Diretório",
+      "icon": "U",
+      "accent": "#ff77a8",
+      "action": {
+        "type": "directory",
+        "path": "C:\\Users"
+      }
+    },
+    {
+      "id": "programs",
+      "label": "Programas",
+      "hint": "Diretório",
+      "icon": "P",
+      "accent": "#f7b955",
+      "action": {
+        "type": "directory",
+        "path": "C:\\Program Files"
+      }
+    },
+    {
+      "id": "windows",
+      "label": "Windows",
+      "hint": "Diretório",
+      "icon": "W",
+      "accent": "#55c4ff",
+      "action": {
+        "type": "directory",
+        "path": "C:\\Windows"
+      }
+    }
+  ]
+}
+

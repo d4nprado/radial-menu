@@ -1,0 +1,19 @@
+[package]
+name = "orbit-launcher"
+version = "0.1.0"
+description = "A fast radial launcher for Windows"
+authors = ["Orbit Launcher contributors"]
+edition = "2021"
+
+[lib]
+name = "orbit_launcher_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+sysinfo = "0.39"
+tauri = { version = "2", features = [] }
+tauri-plugin-global-shortcut = "2"

@@ -1,0 +1,42 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Orbit Launcher",
+  "version": "0.1.0",
+  "identifier": "com.orbitlauncher.app",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "security": {
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; connect-src ipc: http://ipc.localhost ws://localhost:1420 ws://localhost:1421 http://localhost:1420"
+    },
+    "windows": [
+      {
+        "label": "main",
+        "title": "Orbit Launcher",
+        "width": 580,
+        "height": 580,
+        "minWidth": 580,
+        "minHeight": 580,
+        "maxWidth": 580,
+        "maxHeight": 580,
+        "visible": false,
+        "transparent": true,
+        "decorations": false,
+        "resizable": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "shadow": false,
+        "center": true
+      }
+    ]
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "shortDescription": "Menu radial rápido e configurável"
+  }
+}
