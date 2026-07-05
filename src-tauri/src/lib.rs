@@ -1,4 +1,5 @@
 mod commands;
+mod config;
 mod system_stats;
 
 use tauri::{
@@ -33,6 +34,10 @@ pub fn run() {
     tauri::Builder::default()
         .manage(system_stats::SystemStatsState::new())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, _shortcut, event| {
@@ -57,6 +62,8 @@ pub fn run() {
         )
         .setup(|app| {
             app.global_shortcut().register(GLOBAL_SHORTCUT)?;
+            let preferences =
+                config::load_preferences_internal(app.handle()).map_err(std::io::Error::other)?;
 
             let configure_item = MenuItem::with_id(
                 app,
@@ -95,6 +102,10 @@ pub fn run() {
             }
 
             tray.build(app)?;
+
+            if preferences.preferences.open_config_on_startup {
+                show_settings(app.handle()).map_err(std::io::Error::other)?;
+            }
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -115,6 +126,15 @@ pub fn run() {
             commands::hide_settings,
             commands::open_program,
             commands::open_directory,
+            config::load_launcher_config,
+            config::save_launcher_config,
+            config::reset_launcher_config,
+            config::get_config_path,
+            config::open_config_directory,
+            config::get_app_preferences,
+            config::save_app_preferences,
+            config::set_autostart_enabled,
+            config::get_autostart_enabled,
             system_stats::get_system_stats,
         ])
         .run(tauri::generate_context!())

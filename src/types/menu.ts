@@ -45,3 +45,18 @@ export type MenuConfig = {
   shortcut: string
   items: MenuItem[]
 }
+
+export type ConfigLoadResponse = {
+  config: MenuConfig
+  warning: string | null
+}
+
+export type AppPreferences = {
+  startWithWindows: boolean
+  openConfigOnStartup: boolean
+}
+
+export type PreferencesLoadResponse = {
+  preferences: AppPreferences
+  warning: string | null
+}

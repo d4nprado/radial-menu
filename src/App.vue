@@ -8,7 +8,7 @@ import { useSystemStats } from './composables/useSystemStats'
 import menuConfigJson from './config/menu.json'
 import type { MenuConfig, MenuItem } from './types/menu'
 
-const menuConfig = menuConfigJson as MenuConfig
+const menuConfig = ref<MenuConfig>(structuredClone(menuConfigJson as MenuConfig))
 const phase = ref<'entering' | 'visible' | 'leaving'>('entering')
 const { execute, isExecuting, error } = useMenuActions()
 const { stats, start: startStats, stop: stopStats } = useSystemStats()
@@ -56,6 +56,21 @@ function onWindowBlur() {
 }
 
 onMounted(async () => {
+  try {
+    const response = await invoke<{ config: MenuConfig; warning: string | null }>(
+      'load_launcher_config',
+    )
+    menuConfig.value = response.config
+    if (response.warning) error.value = response.warning
+  } catch (cause) {
+    error.value = typeof cause === 'string'
+      ? cause
+      : 'Não foi possível carregar a configuração salva.'
+  }
+
+  unlisteners.push(await listen<MenuConfig>('launcher-config-updated', (event) => {
+    menuConfig.value = event.payload
+  }))
   unlisteners.push(await listen('menu:show', showAnimation))
   unlisteners.push(await listen('menu:hide', () => {
     stopStats()

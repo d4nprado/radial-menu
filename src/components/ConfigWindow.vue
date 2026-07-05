@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { invoke } from '@tauri-apps/api/core'
+import { onMounted, ref } from 'vue'
 import menuConfigJson from '../config/menu.json'
-import type { MenuConfig, MenuItem } from '../types/menu'
+import type { ConfigLoadResponse, MenuConfig, MenuItem } from '../types/menu'
+import AppPreferencesModal from './AppPreferencesModal.vue'
 import MenuItemFormModal from './MenuItemFormModal.vue'
 import MenuItemsPanel from './MenuItemsPanel.vue'
 import RadialMenuPreview from './RadialMenuPreview.vue'
@@ -12,13 +14,39 @@ function cloneItems(items: MenuItem[]) {
   return structuredClone(items)
 }
 
-const items = ref<MenuItem[]>(cloneItems(defaultConfig.items))
-const selectedId = ref<string | null>(items.value[0]?.id ?? null)
+const shortcut = ref(defaultConfig.shortcut)
+const items = ref<MenuItem[]>([])
+const selectedId = ref<string | null>(null)
 const formMode = ref<'add' | 'edit' | null>(null)
 const editingItem = ref<MenuItem | null>(null)
-const showAppSettings = ref(false)
-const status = ref('Alterações ainda não salvas')
-let statusTimer: number | undefined
+const showPreferences = ref(false)
+const busy = ref(true)
+const status = ref('Carregando configuração…')
+const statusKind = ref<'neutral' | 'success' | 'error'>('neutral')
+
+function setStatus(message: string, kind: 'neutral' | 'success' | 'error' = 'neutral') {
+  status.value = message
+  statusKind.value = kind
+}
+
+async function loadConfig() {
+  busy.value = true
+  try {
+    const response = await invoke<ConfigLoadResponse>('load_launcher_config')
+    shortcut.value = response.config.shortcut
+    items.value = cloneItems(response.config.items)
+    selectedId.value = items.value[0]?.id ?? null
+    setStatus(response.warning ?? 'Configuração carregada', response.warning ? 'error' : 'neutral')
+  } catch (cause) {
+    items.value = cloneItems(defaultConfig.items)
+    setStatus(
+      typeof cause === 'string' ? cause : 'Não foi possível carregar. Usando o padrão.',
+      'error',
+    )
+  } finally {
+    busy.value = false
+  }
+}
 
 function selectItem(id: string) {
   selectedId.value = id
@@ -66,7 +94,7 @@ function saveItem(item: MenuItem) {
   }
 
   selectedId.value = item.id
-  status.value = 'Alterações ainda não salvas'
+  setStatus('Alterações ainda não salvas')
   closeForm()
 }
 
@@ -76,22 +104,47 @@ function removeItem(id: string) {
 
   items.value.splice(index, 1)
   selectedId.value = items.value[index]?.id ?? items.value[index - 1]?.id ?? null
-  status.value = 'Alterações ainda não salvas'
+  setStatus('Alterações ainda não salvas')
 }
 
-function saveSession() {
-  window.clearTimeout(statusTimer)
-  status.value = 'Salvo com sucesso nesta sessão'
-  statusTimer = window.setTimeout(() => {
-    status.value = 'Sem persistência permanente nesta etapa'
-  }, 3000)
+async function saveConfig() {
+  busy.value = true
+  try {
+    await invoke('save_launcher_config', {
+      config: { shortcut: shortcut.value, items: items.value },
+    })
+    setStatus('Configuração salva', 'success')
+  } catch (cause) {
+    setStatus(
+      typeof cause === 'string' ? cause : 'Não foi possível salvar a configuração.',
+      'error',
+    )
+  } finally {
+    busy.value = false
+  }
 }
 
-function restoreDefaults() {
-  items.value = cloneItems(defaultConfig.items)
-  selectedId.value = items.value[0]?.id ?? null
-  status.value = 'Padrão restaurado — clique em Salvar'
+async function restoreDefaults() {
+  if (!window.confirm('Restaurar todos os itens para a configuração padrão?')) return
+
+  busy.value = true
+  try {
+    const config = await invoke<MenuConfig>('reset_launcher_config')
+    shortcut.value = config.shortcut
+    items.value = cloneItems(config.items)
+    selectedId.value = items.value[0]?.id ?? null
+    setStatus('Configuração padrão restaurada', 'success')
+  } catch (cause) {
+    setStatus(
+      typeof cause === 'string' ? cause : 'Não foi possível restaurar o padrão.',
+      'error',
+    )
+  } finally {
+    busy.value = false
+  }
 }
+
+onMounted(loadConfig)
 </script>
 
 <template>
@@ -109,7 +162,7 @@ function restoreDefaults() {
         class="config-header__settings"
         aria-label="Configurações do app"
         title="Configurações do app"
-        @click="showAppSettings = true"
+        @click="showPreferences = true"
       >
         ⚙
       </button>
@@ -132,15 +185,17 @@ function restoreDefaults() {
     </div>
 
     <footer class="config-footer">
-      <span class="config-footer__status">
-        <i :class="{ 'is-saved': status.startsWith('Salvo') }" />
+      <span class="config-footer__status" :class="{ 'is-error': statusKind === 'error' }">
+        <i :class="{ 'is-saved': statusKind === 'success' }" />
         {{ status }}
       </span>
       <div>
-        <button type="button" class="button-restore" @click="restoreDefaults">
+        <button type="button" class="button-restore" :disabled="busy" @click="restoreDefaults">
           Restaurar padrão
         </button>
-        <button type="button" class="button-primary" @click="saveSession">Salvar</button>
+        <button type="button" class="button-primary" :disabled="busy" @click="saveConfig">
+          Salvar
+        </button>
       </div>
     </footer>
 
@@ -151,18 +206,7 @@ function restoreDefaults() {
       @cancel="closeForm"
     />
 
-    <div
-      v-if="showAppSettings"
-      class="simple-modal-backdrop"
-      @mousedown.self="showAppSettings = false"
-    >
-      <section class="simple-modal" role="dialog" aria-modal="true" aria-labelledby="app-settings-title">
-        <span aria-hidden="true">⚙</span>
-        <h2 id="app-settings-title">Configurações do app</h2>
-        <p>Configurações do app serão implementadas na próxima etapa.</p>
-        <button type="button" @click="showAppSettings = false">Entendi</button>
-      </section>
-    </div>
+    <AppPreferencesModal v-if="showPreferences" @close="showPreferences = false" />
   </main>
 </template>
 
@@ -275,6 +319,10 @@ h1 {
 .config-footer__status i.is-saved {
   background: #55d6be;
   box-shadow: 0 0 8px rgb(85 214 190 / 58%);
+}
+
+.config-footer__status.is-error {
+  color: #ff9bae;
 }
 
 .config-footer > div {
