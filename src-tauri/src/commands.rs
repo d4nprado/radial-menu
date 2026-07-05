@@ -6,6 +6,7 @@ use std::{
 use tauri::{Emitter, Manager, PhysicalPosition, WebviewWindow};
 
 const WINDOW_LABEL: &str = "main";
+const SETTINGS_WINDOW_LABEL: &str = "settings";
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -32,6 +33,11 @@ fn validated_path(path: &str) -> Result<PathBuf, String> {
 fn main_window(app: &tauri::AppHandle) -> Result<WebviewWindow, String> {
     app.get_webview_window(WINDOW_LABEL)
         .ok_or_else(|| "A janela principal não foi encontrada.".into())
+}
+
+fn settings_window(app: &tauri::AppHandle) -> Result<WebviewWindow, String> {
+    app.get_webview_window(SETTINGS_WINDOW_LABEL)
+        .ok_or_else(|| "A janela de configuração não foi encontrada.".into())
 }
 
 pub fn position_window_at_cursor(window: &WebviewWindow) -> Result<CursorPosition, String> {
@@ -115,6 +121,13 @@ pub fn show_menu(app: tauri::AppHandle) -> Result<CursorPosition, String> {
 #[tauri::command]
 pub fn hide_menu(app: tauri::AppHandle) -> Result<(), String> {
     hide_window(&main_window(&app)?)
+}
+
+#[tauri::command]
+pub fn hide_settings(app: tauri::AppHandle) -> Result<(), String> {
+    settings_window(&app)?
+        .hide()
+        .map_err(|error| command_error("Não foi possível esconder a configuração", error))
 }
 
 #[tauri::command]

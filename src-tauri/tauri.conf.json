@@ -31,6 +31,20 @@
         "skipTaskbar": true,
         "shadow": false,
         "center": true
+      },
+      {
+        "label": "settings",
+        "title": "Configurar launcher",
+        "url": "index.html?window=settings",
+        "width": 640,
+        "height": 420,
+        "minWidth": 480,
+        "minHeight": 320,
+        "visible": false,
+        "transparent": false,
+        "decorations": true,
+        "resizable": true,
+        "center": true
       }
     ]
   },

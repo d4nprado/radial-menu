@@ -1,10 +1,32 @@
 mod commands;
 mod system_stats;
 
-use tauri::Manager;
+use tauri::{
+    menu::{Menu, MenuItem},
+    tray::TrayIconBuilder,
+    Manager, WindowEvent,
+};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
 const GLOBAL_SHORTCUT: &str = "Ctrl+Space";
+const MAIN_WINDOW_LABEL: &str = "main";
+const SETTINGS_WINDOW_LABEL: &str = "settings";
+const CONFIGURE_MENU_ID: &str = "configure";
+const OPEN_MENU_ID: &str = "open";
+const EXIT_MENU_ID: &str = "exit";
+
+fn show_settings(app: &tauri::AppHandle) -> Result<(), String> {
+    let window = app
+        .get_webview_window(SETTINGS_WINDOW_LABEL)
+        .ok_or_else(|| "A janela de configuração não foi encontrada.".to_string())?;
+
+    window
+        .show()
+        .map_err(|error| format!("Não foi possível exibir a configuração: {error}"))?;
+    window
+        .set_focus()
+        .map_err(|error| format!("Não foi possível focar a configuração: {error}"))
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -17,7 +39,7 @@ pub fn run() {
                         return;
                     }
 
-                    if let Some(window) = app.get_webview_window("main") {
+                    if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
                         let is_visible = window.is_visible().unwrap_or(false);
                         let result = if is_visible {
                             commands::hide_window(&window)
@@ -34,13 +56,62 @@ pub fn run() {
         )
         .setup(|app| {
             app.global_shortcut().register(GLOBAL_SHORTCUT)?;
+
+            let configure_item = MenuItem::with_id(
+                app,
+                CONFIGURE_MENU_ID,
+                "Configurar launcher",
+                true,
+                None::<&str>,
+            )?;
+            let open_item =
+                MenuItem::with_id(app, OPEN_MENU_ID, "Abrir menu radial", true, None::<&str>)?;
+            let exit_item = MenuItem::with_id(app, EXIT_MENU_ID, "Sair", true, None::<&str>)?;
+            let tray_menu = Menu::with_items(app, &[&configure_item, &open_item, &exit_item])?;
+
+            let mut tray = TrayIconBuilder::new()
+                .menu(&tray_menu)
+                .tooltip("Orbit Launcher")
+                .on_menu_event(|app, event| match event.id.as_ref() {
+                    CONFIGURE_MENU_ID => {
+                        if let Err(error) = show_settings(app) {
+                            eprintln!("{error}");
+                        }
+                    }
+                    OPEN_MENU_ID => {
+                        if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
+                            if let Err(error) = commands::show_window_at_cursor(&window) {
+                                eprintln!("Falha ao abrir o menu radial: {error}");
+                            }
+                        }
+                    }
+                    EXIT_MENU_ID => app.exit(0),
+                    _ => {}
+                });
+
+            if let Some(icon) = app.default_window_icon() {
+                tray = tray.icon(icon.clone());
+            }
+
+            tray.build(app)?;
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            if window.label() == SETTINGS_WINDOW_LABEL {
+                if let WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    if let Err(error) = window.hide() {
+                        eprintln!("Falha ao esconder a configuração: {error}");
+                    }
+                }
+            }
         })
         .invoke_handler(tauri::generate_handler![
             commands::get_cursor_position,
             commands::move_menu_to_cursor,
             commands::show_menu,
             commands::hide_menu,
+            commands::hide_settings,
             commands::open_program,
             commands::open_directory,
             system_stats::get_system_stats,
