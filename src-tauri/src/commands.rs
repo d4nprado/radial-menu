@@ -149,7 +149,11 @@ pub fn open_directory(path: String) -> Result<(), String> {
     if !path.is_dir() {
         return Err(format!("O caminho não é um diretório: {}", path.display()));
     }
-    open_directory_native(&path)
+    open_directory_path(&path)
+}
+
+pub fn open_directory_path(path: &Path) -> Result<(), String> {
+    open_directory_native(path)
 }
 
 #[cfg(target_os = "windows")]

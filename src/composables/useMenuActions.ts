@@ -13,6 +13,10 @@ const executors: {
     invoke('open_program', { path: action.path }),
   directory: (action) =>
     invoke('open_directory', { path: action.path }),
+  url: () =>
+    Promise.reject('A execução de URLs será implementada em uma próxima etapa.'),
+  system: () =>
+    Promise.reject('A execução de ações do sistema será implementada em uma próxima etapa.'),
 }
 
 export function useMenuActions() {
