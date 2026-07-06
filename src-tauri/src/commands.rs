@@ -5,6 +5,20 @@ use std::{
     process::Command,
 };
 use tauri::{Emitter, Manager, PhysicalPosition, WebviewWindow};
+#[cfg(target_os = "windows")]
+use windows::{
+    core::PCWSTR,
+    Win32::{
+        Graphics::Gdi::{
+            CreateCompatibleDC, CreateDIBSection, DeleteDC, DeleteObject, SelectObject, BITMAPINFO,
+            BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS, HGDIOBJ,
+        },
+        UI::{
+            Shell::ExtractIconExW,
+            WindowsAndMessaging::{DestroyIcon, DrawIconEx, DI_NORMAL, HICON},
+        },
+    },
+};
 
 const WINDOW_LABEL: &str = "main";
 const SETTINGS_WINDOW_LABEL: &str = "settings";
@@ -14,6 +28,14 @@ const SETTINGS_WINDOW_LABEL: &str = "settings";
 pub struct CursorPosition {
     x: f64,
     y: f64,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProgramIcon {
+    width: u32,
+    height: u32,
+    rgba: Vec<u8>,
 }
 
 fn command_error(context: &str, error: impl std::fmt::Display) -> String {
@@ -238,6 +260,110 @@ pub fn open_directory_path(path: &Path) -> Result<(), String> {
 }
 
 #[tauri::command]
+pub fn extract_program_icon(path: String) -> Result<Option<ProgramIcon>, String> {
+    let path = validated_path(&path)?;
+    if !path.is_file() {
+        return Ok(None);
+    }
+    extract_program_icon_native(&path)
+}
+
+#[cfg(target_os = "windows")]
+fn extract_program_icon_native(path: &Path) -> Result<Option<ProgramIcon>, String> {
+    use std::os::windows::ffi::OsStrExt;
+
+    let wide_path: Vec<u16> = path.as_os_str().encode_wide().chain(Some(0)).collect();
+    let mut icon = HICON::default();
+    let extracted =
+        unsafe { ExtractIconExW(PCWSTR(wide_path.as_ptr()), 0, Some(&mut icon), None, 1) };
+    if extracted == 0 || icon.0.is_null() {
+        return Ok(None);
+    }
+
+    let result = icon_to_rgba(icon);
+    unsafe {
+        let _ = DestroyIcon(icon);
+    }
+    result.map(Some)
+}
+
+#[cfg(target_os = "windows")]
+fn icon_to_rgba(icon: HICON) -> Result<ProgramIcon, String> {
+    const ICON_SIZE: i32 = 48;
+    let dc = unsafe { CreateCompatibleDC(None) };
+    if dc.is_invalid() {
+        return Err("Não foi possível preparar o ícone do programa.".into());
+    }
+
+    let mut bitmap_info = BITMAPINFO::default();
+    bitmap_info.bmiHeader = BITMAPINFOHEADER {
+        biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
+        biWidth: ICON_SIZE,
+        biHeight: -ICON_SIZE,
+        biPlanes: 1,
+        biBitCount: 32,
+        biCompression: BI_RGB.0,
+        ..Default::default()
+    };
+
+    let mut pixels = std::ptr::null_mut();
+    let bitmap =
+        unsafe { CreateDIBSection(Some(dc), &bitmap_info, DIB_RGB_COLORS, &mut pixels, None, 0) }
+            .map_err(|error| {
+            unsafe {
+                let _ = DeleteDC(dc);
+            }
+            command_error("Não foi possível criar a imagem do ícone", error)
+        })?;
+
+    let old_bitmap = unsafe { SelectObject(dc, HGDIOBJ(bitmap.0)) };
+    let draw_result =
+        unsafe { DrawIconEx(dc, 0, 0, icon, ICON_SIZE, ICON_SIZE, 0, None, DI_NORMAL) };
+
+    let byte_count = (ICON_SIZE * ICON_SIZE * 4) as usize;
+    let mut rgba = if draw_result.is_ok() && !pixels.is_null() {
+        unsafe { std::slice::from_raw_parts(pixels.cast::<u8>(), byte_count) }.to_vec()
+    } else {
+        Vec::new()
+    };
+
+    unsafe {
+        SelectObject(dc, old_bitmap);
+        let _ = DeleteObject(HGDIOBJ(bitmap.0));
+        let _ = DeleteDC(dc);
+    }
+
+    draw_result.map_err(|error| command_error("Não foi possível desenhar o ícone", error))?;
+    if rgba.len() != byte_count {
+        return Err("O Windows retornou um ícone vazio.".into());
+    }
+
+    let has_alpha = rgba.chunks_exact(4).any(|pixel| pixel[3] != 0);
+    for pixel in rgba.chunks_exact_mut(4) {
+        pixel.swap(0, 2);
+        if !has_alpha && pixel[..3].iter().any(|channel| *channel != 0) {
+            pixel[3] = 255;
+        } else if has_alpha && pixel[3] > 0 && pixel[3] < 255 {
+            let alpha = pixel[3] as u16;
+            for channel in &mut pixel[..3] {
+                *channel = ((*channel as u16 * 255) / alpha).min(255) as u8;
+            }
+        }
+    }
+
+    Ok(ProgramIcon {
+        width: ICON_SIZE as u32,
+        height: ICON_SIZE as u32,
+        rgba,
+    })
+}
+
+#[cfg(not(target_os = "windows"))]
+fn extract_program_icon_native(_path: &Path) -> Result<Option<ProgramIcon>, String> {
+    Ok(None)
+}
+
+#[tauri::command]
 pub fn open_url(url: String) -> Result<(), String> {
     let url = normalize_http_url(&url)?;
     open_uri_native(&url)
@@ -293,6 +419,8 @@ fn open_uri_native(uri: &str) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(target_os = "windows")]
+    use super::extract_program_icon_native;
     use super::normalize_http_url;
 
     #[test]
@@ -322,6 +450,21 @@ mod tests {
             normalize_http_url("https://example.com/a b").unwrap_err(),
             "URL inválida"
         );
+    }
+
+    #[test]
+    #[cfg(target_os = "windows")]
+    fn extracts_rgba_icon_from_windows_executable() {
+        let executable = std::env::var_os("WINDIR")
+            .map(std::path::PathBuf::from)
+            .unwrap()
+            .join("explorer.exe");
+        let icon = extract_program_icon_native(&executable)
+            .unwrap()
+            .expect("explorer.exe should provide an icon");
+
+        assert_eq!(icon.rgba.len(), (icon.width * icon.height * 4) as usize);
+        assert!(icon.rgba.chunks_exact(4).any(|pixel| pixel[3] != 0));
     }
 }
 

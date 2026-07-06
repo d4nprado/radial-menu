@@ -130,6 +130,7 @@ pub fn run() {
             commands::hide_settings,
             commands::open_program,
             commands::open_directory,
+            commands::extract_program_icon,
             commands::open_url,
             commands::execute_system_action,
             config::load_launcher_config,
