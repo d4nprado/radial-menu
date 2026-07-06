@@ -59,6 +59,12 @@ pub enum LauncherAction {
     System {
         target: SystemActionTarget,
     },
+    Stream {
+        provider: crate::stream::StreamProvider,
+        operation: crate::stream::StreamOperation,
+        #[serde(rename = "sceneName")]
+        scene_name: String,
+    },
     Group {
         items: Vec<LauncherMenuItem>,
     },
@@ -180,6 +186,19 @@ fn validate_menu_items(
         }
         if !ids.insert(&item.id) {
             return Err(format!("O id '{}' está duplicado.", item.id));
+        }
+
+        if let LauncherAction::Stream {
+            provider,
+            operation,
+            scene_name,
+        } = &item.action
+        {
+            crate::stream::validate_stream_action(&crate::stream::StreamAction {
+                provider: provider.clone(),
+                operation: operation.clone(),
+                scene_name: scene_name.clone(),
+            })?;
         }
 
         if let LauncherAction::Group { items } = &item.action {
