@@ -11,25 +11,31 @@ personalizáveis, agrupamentos e uma interface de configuração visual.
 
 ## Preview
 
-### Menu radial
+### Menus radiais
 
-![Menu radial do Orbit Launcher](docs/screenshots/radial-menu.png)
+<p align="center">
+  <img src="docs/screenshots/radial-menu.png" alt="Menu radial" width="45%" />
+  <img src="docs/screenshots/group-radial-menu.png" alt="Menu radial dentro de um grupo" width="45%" />
+</p>
 
-### Menu radial dentro de um grupo
+<p align="center">
+  <em>Menu principal</em> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+  <em>Menu dentro de um grupo</em>
+</p>
 
-![Menu radial dentro de um grupo](docs/screenshots/group-radial-menu.png)
+### Configuração
 
-### Configuração visual
+<p align="center">
+  <img src="docs/screenshots/config-window.png" alt="Janela de configuração" width="30%" />
+  <img src="docs/screenshots/group-config.png" alt="Configuração de agrupamentos" width="30%" />
+  <img src="docs/screenshots/preferences.png" alt="Preferências" width="30%" />
+</p>
 
-![Janela de configuração do Orbit Launcher](docs/screenshots/config-window.png)
-
-### Agrupamentos na configuração
-
-![Configuração de agrupamentos](docs/screenshots/group-config.png)
-
-### Preferências
-
-![Preferências do Orbit Launcher](docs/screenshots/preferences.png)
+<p align="center">
+  <em>Tela principal</em> &nbsp;&nbsp;&nbsp;
+  <em>Agrupamentos</em> &nbsp;&nbsp;&nbsp;
+  <em>Preferências</em>
+</p>
 
 ## Funcionalidades
 
