@@ -3,7 +3,6 @@ import type { SystemStats } from '../types/systemStats'
 
 const props = defineProps<{
   stats: SystemStats | null
-  shortcut: string
 }>()
 
 function percent(value: number | null | undefined) {
@@ -55,6 +54,7 @@ function rate(bytes: number | null | undefined) {
       <span class="is-upload">↑ {{ rate(props.stats?.uploadBytesPerSecond) }}</span>
     </div>
 
-    <small class="system-status__shortcut">{{ shortcut }}</small>
+    <!-- Reserved for a future group name, back action, or navigation hint. -->
+    <div class="system-status__context" aria-hidden="true" />
   </div>
 </template>

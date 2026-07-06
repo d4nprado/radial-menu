@@ -6,7 +6,6 @@ import SystemStatus from './SystemStatus.vue'
 
 defineProps<{
   items: MenuItem[]
-  shortcut: string
   phase: 'entering' | 'visible' | 'leaving'
   stats: SystemStats | null
   disabled?: boolean
@@ -39,7 +38,7 @@ defineEmits<{
       </p>
 
       <button class="radial-center" aria-label="Fechar menu" @click.stop="$emit('dismiss')">
-        <SystemStatus :stats="stats" :shortcut="shortcut" />
+        <SystemStatus :stats="stats" />
       </button>
     </div>
   </div>
