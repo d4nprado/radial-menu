@@ -15,7 +15,7 @@ defineEmits<{
 
 const position = computed(() => {
   const angle = (props.index / props.total) * Math.PI * 2 - Math.PI / 2
-  const radius = 170
+  const radius = 210
   const y = Math.sin(angle) * radius
 
   return {

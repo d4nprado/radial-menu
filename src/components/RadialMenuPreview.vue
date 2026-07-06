@@ -1,30 +1,107 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import type { MenuItem } from '../types/menu'
 
 const props = defineProps<{
   items: MenuItem[]
   selectedId: string | null
+  maxItems: number
 }>()
 
-defineEmits<{
+const emit = defineEmits<{
   select: [id: string]
   add: []
+  reorder: [fromIndex: number, toIndex: number]
 }>()
+
+const ring = ref<HTMLElement | null>(null)
+const draggingId = ref<string | null>(null)
+const dragTargetIndex = ref<number | null>(null)
+const dragStart = ref({ x: 0, y: 0 })
+const didDrag = ref(false)
 
 const selectedItem = computed(() =>
   props.items.find((item) => item.id === props.selectedId),
 )
 
 function itemPosition(index: number) {
-  const angle = (index / props.items.length) * Math.PI * 2 - Math.PI / 2
-  const radius = 124
+  const positionIndex = props.items[index]?.id === draggingId.value
+    ? (dragTargetIndex.value ?? index)
+    : index
+  const angle = (positionIndex / props.items.length) * Math.PI * 2 - Math.PI / 2
+  const radius = 150
 
   return {
     '--preview-x': `${Math.cos(angle) * radius}px`,
     '--preview-y': `${Math.sin(angle) * radius}px`,
-    '--preview-accent': props.items[index].accent,
+    '--preview-accent': props.items[index]?.accent ?? '#8b7cff',
   }
+}
+
+function indexFromPointer(event: PointerEvent) {
+  if (!ring.value || props.items.length < 2) return 0
+
+  const rect = ring.value.getBoundingClientRect()
+  const x = event.clientX - (rect.left + rect.width / 2)
+  const y = event.clientY - (rect.top + rect.height / 2)
+  const angleFromTop = (
+    Math.atan2(y, x)
+    + Math.PI / 2
+    + Math.PI * 2
+  ) % (Math.PI * 2)
+
+  return Math.round(
+    angleFromTop / (Math.PI * 2) * props.items.length,
+  ) % props.items.length
+}
+
+function startDrag(event: PointerEvent, item: MenuItem, index: number) {
+  if (event.button !== 0) return
+
+  draggingId.value = item.id
+  dragTargetIndex.value = index
+  dragStart.value = { x: event.clientX, y: event.clientY }
+  didDrag.value = false
+  emit('select', item.id)
+
+  if (event.currentTarget instanceof HTMLElement) {
+    event.currentTarget.setPointerCapture(event.pointerId)
+  }
+}
+
+function moveDrag(event: PointerEvent) {
+  if (!draggingId.value) return
+
+  const distance = Math.hypot(
+    event.clientX - dragStart.value.x,
+    event.clientY - dragStart.value.y,
+  )
+  if (distance < 5 && !didDrag.value) return
+
+  didDrag.value = true
+  dragTargetIndex.value = indexFromPointer(event)
+}
+
+function finishDrag(event: PointerEvent) {
+  if (!draggingId.value) return
+
+  const fromIndex = props.items.findIndex((item) => item.id === draggingId.value)
+  const toIndex = dragTargetIndex.value ?? fromIndex
+  if (didDrag.value && fromIndex >= 0 && toIndex !== fromIndex) {
+    emit('reorder', fromIndex, toIndex)
+  }
+
+  if (
+    event.currentTarget instanceof HTMLElement
+    && event.currentTarget.hasPointerCapture(event.pointerId)
+  ) {
+    event.currentTarget.releasePointerCapture(event.pointerId)
+  }
+  draggingId.value = null
+  dragTargetIndex.value = null
+  requestAnimationFrame(() => {
+    didDrag.value = false
+  })
 }
 </script>
 
@@ -38,7 +115,7 @@ function itemPosition(index: number) {
       <small>{{ items.length }} {{ items.length === 1 ? 'ação' : 'ações' }}</small>
     </div>
 
-    <div class="preview-ring">
+    <div ref="ring" class="preview-ring">
       <div class="preview-ring__orbit preview-ring__orbit--outer" />
       <div class="preview-ring__orbit preview-ring__orbit--inner" />
 
@@ -47,11 +124,18 @@ function itemPosition(index: number) {
         :key="item.id"
         type="button"
         class="preview-item"
-        :class="{ 'is-selected': item.id === selectedId }"
+        :class="{
+          'is-selected': item.id === selectedId,
+          'is-dragging': item.id === draggingId,
+        }"
         :style="itemPosition(index)"
         :aria-label="`Selecionar ${item.label}`"
         :title="`${item.label} — ${item.hint}`"
-        @click="$emit('select', item.id)"
+        @click="!didDrag && emit('select', item.id)"
+        @pointerdown="startDrag($event, item, index)"
+        @pointermove="moveDrag"
+        @pointerup="finishDrag"
+        @pointercancel="finishDrag"
       >
         <span>{{ item.icon }}</span>
       </button>
@@ -68,7 +152,13 @@ function itemPosition(index: number) {
         <strong>{{ selectedItem?.label ?? (items.length ? 'Nenhum item selecionado' : 'Menu vazio') }}</strong>
         <small v-if="selectedItem">{{ selectedItem.hint }}</small>
       </div>
-      <button type="button" class="preview-card__add" @click="$emit('add')">
+      <button
+        type="button"
+        class="preview-card__add"
+        :disabled="items.length >= maxItems"
+        :title="items.length >= maxItems ? 'Limite de 10 ações no menu principal' : 'Adicionar ação'"
+        @click="emit('add')"
+      >
         <span aria-hidden="true">+</span>
         Adicionar ação
       </button>
@@ -124,8 +214,8 @@ h2 {
 
 .preview-ring {
   position: relative;
-  width: 340px;
-  height: 340px;
+  width: 400px;
+  height: 400px;
   margin: auto;
   flex: 0 0 auto;
 }
@@ -140,14 +230,14 @@ h2 {
 }
 
 .preview-ring__orbit--outer {
-  width: 286px;
-  height: 286px;
+  width: 336px;
+  height: 336px;
   border-style: dashed;
 }
 
 .preview-ring__orbit--inner {
-  width: 148px;
-  height: 148px;
+  width: 166px;
+  height: 166px;
   border-color: rgb(139 124 255 / 15%);
 }
 
@@ -170,8 +260,16 @@ h2 {
   background: linear-gradient(145deg, rgb(37 41 61 / 96%), rgb(15 18 31 / 98%));
   box-shadow: 0 10px 24px rgb(0 0 0 / 28%);
   cursor: pointer;
+  touch-action: none;
   transform: translate(calc(-50% + var(--preview-x)), calc(-50% + var(--preview-y)));
   transition: 150ms ease;
+  user-select: none;
+}
+
+.preview-item.is-dragging {
+  z-index: 5;
+  cursor: grabbing;
+  transition: transform 80ms ease;
 }
 
 .preview-item span {
@@ -278,5 +376,10 @@ h2 {
 .preview-card__add span {
   font-size: 18px;
   line-height: 0;
+}
+
+.preview-card__add:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
 }
 </style>

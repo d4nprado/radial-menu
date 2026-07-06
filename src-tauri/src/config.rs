@@ -15,6 +15,7 @@ const APP_PREFERENCES_FILE: &str = "app-preferences.json";
 pub const DEFAULT_SHORTCUT: &str = "Ctrl+Space";
 pub const CONFIG_UPDATED_EVENT: &str = "launcher-config-updated";
 pub const SHORTCUT_UPDATED_EVENT: &str = "launcher-shortcut-updated";
+const MAX_MAIN_MENU_ITEMS: usize = 10;
 
 pub struct ShortcutRegistrationState(pub Mutex<String>);
 
@@ -145,6 +146,12 @@ fn write_json<T: Serialize>(path: &Path, value: &T) -> Result<(), String> {
 }
 
 fn validate_launcher_config(config: &LauncherConfig) -> Result<(), String> {
+    if config.items.len() > MAX_MAIN_MENU_ITEMS {
+        return Err(format!(
+            "O menu principal aceita no máximo {MAX_MAIN_MENU_ITEMS} ações."
+        ));
+    }
+
     let mut ids = HashSet::new();
     for item in &config.items {
         if item.id.trim().is_empty() || item.label.trim().is_empty() || item.icon.trim().is_empty()
@@ -173,15 +180,34 @@ pub fn load_launcher_config_internal(
 
     let contents = fs::read_to_string(&path)
         .map_err(|error| config_error("Não foi possível ler a configuração salva", error))?;
-    match serde_json::from_str::<LauncherConfig>(&contents).and_then(|config| {
-        validate_launcher_config(&config)
-            .map(|_| config)
-            .map_err(serde::de::Error::custom)
-    }) {
-        Ok(config) => Ok(LauncherConfigResponse {
-            config,
-            warning: None,
-        }),
+    match serde_json::from_str::<LauncherConfig>(&contents) {
+        Ok(mut config) if config.items.len() > MAX_MAIN_MENU_ITEMS => {
+            config.items.truncate(MAX_MAIN_MENU_ITEMS);
+            validate_launcher_config(&config)?;
+            Ok(LauncherConfigResponse {
+                config,
+                warning: Some(format!(
+                    "A configuração salva excede o limite atual. Os primeiros \
+                     {MAX_MAIN_MENU_ITEMS} itens foram carregados; salve para confirmar."
+                )),
+            })
+        }
+        Ok(config) => match validate_launcher_config(&config) {
+            Ok(()) => Ok(LauncherConfigResponse {
+                config,
+                warning: None,
+            }),
+            Err(error) => {
+                let config = empty_launcher_config();
+                write_json(&path, &config)?;
+                Ok(LauncherConfigResponse {
+                    config,
+                    warning: Some(format!(
+                        "O arquivo salvo estava inválido e uma configuração vazia foi carregada: {error}"
+                    )),
+                })
+            }
+        },
         Err(error) => {
             let config = empty_launcher_config();
             write_json(&path, &config)?;
