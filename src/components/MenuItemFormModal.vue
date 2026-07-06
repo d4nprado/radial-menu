@@ -110,7 +110,7 @@ function submit() {
       <header>
         <div>
           <span>{{ isEditing ? 'EDITAR AÇÃO' : 'NOVA AÇÃO' }}</span>
-          <h2>{{ isEditing ? 'Editar item do menu' : 'Adicionar ao menu radial' }}</h2>
+          <h2>{{ isEditing ? 'Editar ação' : 'Adicionar ao menu radial' }}</h2>
         </div>
         <button type="button" class="item-modal__close" aria-label="Fechar" @click="emit('cancel')">
           ×

@@ -25,7 +25,8 @@ export type SystemAction = {
   target: SystemActionTarget
 }
 
-// Add future action contracts (for example "obs") to this union.
+// This union can later receive a recursive GroupAction
+// (`{ type: 'group', items: MenuItem[] }`) without changing existing actions.
 export type MenuAction =
   | ProgramAction
   | DirectoryAction
@@ -45,6 +46,8 @@ export type MenuConfig = {
   shortcut: string
   items: MenuItem[]
 }
+
+export const MAX_MAIN_MENU_ITEMS = 10
 
 export type ConfigLoadResponse = {
   config: MenuConfig

@@ -1,14 +1,18 @@
 <script setup lang="ts">
 import { invoke } from '@tauri-apps/api/core'
-import { onMounted, ref } from 'vue'
-import type { ConfigLoadResponse, MenuItem } from '../types/menu'
+import { onMounted, ref, toRaw } from 'vue'
+import {
+  MAX_MAIN_MENU_ITEMS,
+  type ConfigLoadResponse,
+  type MenuItem,
+} from '../types/menu'
 import AppPreferencesModal from './AppPreferencesModal.vue'
 import MenuItemFormModal from './MenuItemFormModal.vue'
 import MenuItemsPanel from './MenuItemsPanel.vue'
 import RadialMenuPreview from './RadialMenuPreview.vue'
 
 function cloneItems(items: MenuItem[]) {
-  return structuredClone(items)
+  return structuredClone(toRaw(items))
 }
 
 const shortcut = ref('Ctrl+Space')
@@ -16,6 +20,7 @@ const items = ref<MenuItem[]>([])
 const selectedId = ref<string | null>(null)
 const formMode = ref<'add' | 'edit' | null>(null)
 const editingItem = ref<MenuItem | null>(null)
+const editingOriginalId = ref<string | null>(null)
 const showPreferences = ref(false)
 const busy = ref(true)
 const status = ref('Carregando configuração…')
@@ -50,18 +55,26 @@ function selectItem(id: string) {
 }
 
 function openAddForm() {
+  if (items.value.length >= MAX_MAIN_MENU_ITEMS) {
+    setStatus('Limite de 10 ações no menu principal', 'error')
+    return
+  }
+
   editingItem.value = null
+  editingOriginalId.value = null
   formMode.value = 'add'
 }
 
 function openEditForm(item: MenuItem) {
-  editingItem.value = cloneItems([item])[0]
+  editingItem.value = structuredClone(toRaw(item))
+  editingOriginalId.value = item.id
   formMode.value = 'edit'
 }
 
 function closeForm() {
   formMode.value = null
   editingItem.value = null
+  editingOriginalId.value = null
 }
 
 function createItemId(label: string) {
@@ -83,9 +96,20 @@ function createItemId(label: string) {
 
 function saveItem(item: MenuItem) {
   if (formMode.value === 'edit') {
-    const index = items.value.findIndex((current) => current.id === item.id)
-    if (index >= 0) items.value[index] = item
+    const originalId = editingOriginalId.value
+    const index = items.value.findIndex((current) => current.id === originalId)
+    if (index < 0 || !originalId) {
+      setStatus('O item que estava sendo editado não foi encontrado.', 'error')
+      return
+    }
+    item.id = originalId
+    items.value[index] = item
   } else {
+    if (items.value.length >= MAX_MAIN_MENU_ITEMS) {
+      setStatus('Limite de 10 ações no menu principal', 'error')
+      closeForm()
+      return
+    }
     item.id = createItemId(item.label)
     items.value.push(item)
   }
@@ -93,6 +117,22 @@ function saveItem(item: MenuItem) {
   selectedId.value = item.id
   setStatus('Alterações ainda não salvas')
   closeForm()
+}
+
+function reorderItems(fromIndex: number, toIndex: number) {
+  if (
+    fromIndex === toIndex
+    || fromIndex < 0
+    || toIndex < 0
+    || fromIndex >= items.value.length
+    || toIndex >= items.value.length
+  ) return
+
+  const [movedItem] = items.value.splice(fromIndex, 1)
+  if (!movedItem) return
+  items.value.splice(toIndex, 0, movedItem)
+  selectedId.value = movedItem.id
+  setStatus('Alterações ainda não salvas')
 }
 
 function removeItem(id: string) {
@@ -149,8 +189,10 @@ onMounted(loadConfig)
       <RadialMenuPreview
         :items="items"
         :selected-id="selectedId"
+        :max-items="MAX_MAIN_MENU_ITEMS"
         @select="selectItem"
         @add="openAddForm"
+        @reorder="reorderItems"
       />
       <MenuItemsPanel
         :items="items"
@@ -187,8 +229,8 @@ onMounted(loadConfig)
 <style scoped>
 .config-window {
   display: grid;
-  min-width: 760px;
-  min-height: 600px;
+  min-width: 980px;
+  min-height: 680px;
   padding: 0 34px 22px;
   overflow: auto;
   grid-template-rows: 92px minmax(0, 1fr) 70px;
@@ -267,7 +309,7 @@ h1 {
   display: grid;
   min-height: 0;
   padding: 24px 0;
-  grid-template-columns: minmax(480px, 1.25fr) minmax(330px, 0.75fr);
+  grid-template-columns: minmax(540px, 1.35fr) minmax(340px, 0.65fr);
   gap: 20px;
 }
 
@@ -373,7 +415,7 @@ h1 {
 
 @media (max-width: 940px) {
   .config-content {
-    grid-template-columns: minmax(430px, 1fr) minmax(300px, 0.72fr);
+    grid-template-columns: minmax(500px, 1fr) minmax(320px, 0.72fr);
   }
 }
 </style>
