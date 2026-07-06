@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { MenuAction, MenuItem, SystemActionTarget } from '../types/menu'
+import MenuItemIcon from './MenuItemIcon.vue'
 
 defineProps<{
   items: MenuItem[]
@@ -68,7 +69,7 @@ function itemSubtitle(item: MenuItem) {
         @click="emit('select', item.id)"
       >
         <span class="items-panel__icon" :style="{ '--item-accent': item.accent }">
-          {{ item.icon }}
+          <MenuItemIcon :item="item" />
         </span>
 
         <span class="items-panel__copy">

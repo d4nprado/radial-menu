@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { MenuItem } from '../types/menu'
+import MenuItemIcon from './MenuItemIcon.vue'
 
 const props = defineProps<{
   item: MenuItem
@@ -41,7 +42,9 @@ const tooltipPlacement = computed(() => {
     @click.stop="$emit('select', item)"
   >
     <span class="radial-item__glow" />
-    <span class="radial-item__icon">{{ item.icon }}</span>
+    <span class="radial-item__icon">
+      <MenuItemIcon :item="item" />
+    </span>
     <span
       class="radial-item__copy"
       :class="`is-${tooltipPlacement}`"

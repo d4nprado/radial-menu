@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import type { MenuItem } from '../types/menu'
+import MenuItemIcon from './MenuItemIcon.vue'
 
 const props = defineProps<{
   items: MenuItem[]
@@ -149,7 +150,9 @@ function activateItem(item: MenuItem) {
         @pointerup="finishDrag"
         @pointercancel="finishDrag"
       >
-        <span>{{ item.icon }}</span>
+        <span>
+          <MenuItemIcon :item="item" />
+        </span>
       </button>
 
       <button
