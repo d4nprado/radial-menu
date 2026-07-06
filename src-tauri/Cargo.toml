@@ -4,6 +4,7 @@ version = "0.2.0"
 description = "A fast radial launcher for Windows"
 authors = ["Orbit Launcher contributors"]
 edition = "2021"
+license = "MIT"
 
 [lib]
 name = "orbit_launcher_lib"
