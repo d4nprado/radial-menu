@@ -10,8 +10,10 @@ withDefaults(defineProps<{
   stats: SystemStats | null
   disabled?: boolean
   centerAction?: CenterAction
+  levelKey?: string
 }>(), {
   centerAction: 'close',
+  levelKey: 'main',
 })
 
 defineEmits<{
@@ -29,7 +31,7 @@ defineEmits<{
 
       <RadialMenuItem
         v-for="(item, index) in items"
-        :key="item.id"
+        :key="`${levelKey}:${item.id}`"
         :item="item"
         :index="index"
         :total="items.length"

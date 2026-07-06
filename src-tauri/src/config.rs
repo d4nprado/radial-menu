@@ -15,7 +15,7 @@ const APP_PREFERENCES_FILE: &str = "app-preferences.json";
 pub const DEFAULT_SHORTCUT: &str = "Ctrl+Space";
 pub const CONFIG_UPDATED_EVENT: &str = "launcher-config-updated";
 pub const SHORTCUT_UPDATED_EVENT: &str = "launcher-shortcut-updated";
-const MAX_MAIN_MENU_ITEMS: usize = 10;
+const MAX_MENU_ITEMS_PER_LEVEL: usize = 10;
 
 pub struct ShortcutRegistrationState(pub Mutex<String>);
 
@@ -50,6 +50,7 @@ pub enum LauncherAction {
     Directory { path: String },
     Url { url: String },
     System { target: SystemActionTarget },
+    Group { items: Vec<LauncherMenuItem> },
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -146,20 +147,35 @@ fn write_json<T: Serialize>(path: &Path, value: &T) -> Result<(), String> {
 }
 
 fn validate_launcher_config(config: &LauncherConfig) -> Result<(), String> {
-    if config.items.len() > MAX_MAIN_MENU_ITEMS {
+    validate_menu_items(&config.items, true, "O menu principal")
+}
+
+fn validate_menu_items(
+    items: &[LauncherMenuItem],
+    allow_groups: bool,
+    level_name: &str,
+) -> Result<(), String> {
+    if items.len() > MAX_MENU_ITEMS_PER_LEVEL {
         return Err(format!(
-            "O menu principal aceita no máximo {MAX_MAIN_MENU_ITEMS} ações."
+            "{level_name} aceita no máximo {MAX_MENU_ITEMS_PER_LEVEL} itens."
         ));
     }
 
     let mut ids = HashSet::new();
-    for item in &config.items {
+    for item in items {
         if item.id.trim().is_empty() || item.label.trim().is_empty() || item.icon.trim().is_empty()
         {
             return Err("Cada item precisa ter id, label e ícone.".into());
         }
         if !ids.insert(&item.id) {
             return Err(format!("O id '{}' está duplicado.", item.id));
+        }
+
+        if let LauncherAction::Group { items } = &item.action {
+            if !allow_groups {
+                return Err("Grupos não podem conter outros grupos nesta versão.".into());
+            }
+            validate_menu_items(items, false, &format!("O grupo '{}'", item.label))?;
         }
     }
     Ok(())
@@ -181,14 +197,14 @@ pub fn load_launcher_config_internal(
     let contents = fs::read_to_string(&path)
         .map_err(|error| config_error("Não foi possível ler a configuração salva", error))?;
     match serde_json::from_str::<LauncherConfig>(&contents) {
-        Ok(mut config) if config.items.len() > MAX_MAIN_MENU_ITEMS => {
-            config.items.truncate(MAX_MAIN_MENU_ITEMS);
+        Ok(mut config) if config.items.len() > MAX_MENU_ITEMS_PER_LEVEL => {
+            config.items.truncate(MAX_MENU_ITEMS_PER_LEVEL);
             validate_launcher_config(&config)?;
             Ok(LauncherConfigResponse {
                 config,
                 warning: Some(format!(
                     "A configuração salva excede o limite atual. Os primeiros \
-                     {MAX_MAIN_MENU_ITEMS} itens foram carregados; salve para confirmar."
+                     {MAX_MENU_ITEMS_PER_LEVEL} itens foram carregados; salve para confirmar."
                 )),
             })
         }

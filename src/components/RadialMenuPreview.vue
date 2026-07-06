@@ -6,12 +6,15 @@ const props = defineProps<{
   items: MenuItem[]
   selectedId: string | null
   maxItems: number
+  groupLabel: string | null
 }>()
 
 const emit = defineEmits<{
   select: [id: string]
   add: []
   reorder: [fromIndex: number, toIndex: number]
+  openGroup: [id: string]
+  back: []
 }>()
 
 const ring = ref<HTMLElement | null>(null)
@@ -103,6 +106,15 @@ function finishDrag(event: PointerEvent) {
     didDrag.value = false
   })
 }
+
+function activateItem(item: MenuItem) {
+  if (didDrag.value) return
+  if (item.action.type === 'group') {
+    emit('openGroup', item.id)
+  } else {
+    emit('select', item.id)
+  }
+}
 </script>
 
 <template>
@@ -112,7 +124,7 @@ function finishDrag(event: PointerEvent) {
         <span>VISUALIZAÇÃO</span>
         <h2 id="preview-title">Preview radial</h2>
       </div>
-      <small>{{ items.length }} {{ items.length === 1 ? 'ação' : 'ações' }}</small>
+      <small>{{ items.length }} {{ items.length === 1 ? 'item' : 'itens' }}</small>
     </div>
 
     <div ref="ring" class="preview-ring">
@@ -131,7 +143,7 @@ function finishDrag(event: PointerEvent) {
         :style="itemPosition(index)"
         :aria-label="`Selecionar ${item.label}`"
         :title="`${item.label} — ${item.hint}`"
-        @click="!didDrag && emit('select', item.id)"
+        @click="activateItem(item)"
         @pointerdown="startDrag($event, item, index)"
         @pointermove="moveDrag"
         @pointerup="finishDrag"
@@ -140,10 +152,21 @@ function finishDrag(event: PointerEvent) {
         <span>{{ item.icon }}</span>
       </button>
 
-      <div class="preview-center">
-        <strong>ORBIT</strong>
-        <span>{{ selectedItem?.label ?? (items.length ? 'Selecione uma ação' : 'Nenhuma ação configurada') }}</span>
-      </div>
+      <button
+        type="button"
+        class="preview-center"
+        :class="{ 'is-back': groupLabel }"
+        :disabled="!groupLabel"
+        :aria-label="groupLabel ? 'Voltar ao menu principal' : undefined"
+        @click="groupLabel && emit('back')"
+      >
+        <strong>{{ groupLabel ?? 'ORBIT' }}</strong>
+        <span>
+          {{ groupLabel
+            ? '← Voltar'
+            : (selectedItem?.label ?? (items.length ? 'Selecione um item' : 'Nenhum item configurado')) }}
+        </span>
+      </button>
     </div>
 
     <div class="preview-card__selection">
@@ -156,7 +179,7 @@ function finishDrag(event: PointerEvent) {
         type="button"
         class="preview-card__add"
         :disabled="items.length >= maxItems"
-        :title="items.length >= maxItems ? 'Limite de 10 ações no menu principal' : 'Adicionar ação'"
+        :title="items.length >= maxItems ? 'Limite de 10 itens neste nível' : 'Adicionar item'"
         @click="emit('add')"
       >
         <span aria-hidden="true">+</span>
@@ -309,6 +332,22 @@ h2 {
   background: linear-gradient(145deg, #24283c, #0d101d);
   box-shadow: 0 14px 34px rgb(0 0 0 / 34%);
   transform: translate(-50%, -50%);
+}
+
+.preview-center:disabled {
+  cursor: default;
+}
+
+.preview-center.is-back {
+  cursor: pointer;
+}
+
+.preview-center.is-back:hover,
+.preview-center.is-back:focus-visible {
+  border-color: rgb(139 124 255 / 55%);
+  box-shadow:
+    0 0 0 4px rgb(139 124 255 / 10%),
+    0 14px 34px rgb(0 0 0 / 34%);
 }
 
 .preview-center strong {

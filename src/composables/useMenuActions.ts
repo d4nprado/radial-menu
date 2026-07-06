@@ -17,6 +17,8 @@ const executors: {
     Promise.reject('A execução de URLs será implementada em uma próxima etapa.'),
   system: () =>
     Promise.reject('A execução de ações do sistema será implementada em uma próxima etapa.'),
+  group: () =>
+    Promise.reject('Grupos devem ser abertos pelo menu, não executados como ações.'),
 }
 
 export function useMenuActions() {

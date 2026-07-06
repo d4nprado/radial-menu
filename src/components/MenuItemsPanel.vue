@@ -1,23 +1,21 @@
 <script setup lang="ts">
-import { computed } from 'vue'
 import type { MenuAction, MenuItem, SystemActionTarget } from '../types/menu'
 
-const props = defineProps<{
+defineProps<{
   items: MenuItem[]
   selectedId: string | null
+  groupLabel: string | null
 }>()
 
 const emit = defineEmits<{
   select: [id: string]
   edit: [item: MenuItem]
   remove: [id: string]
+  openGroup: [id: string]
+  back: []
 }>()
 
-const selectedItem = computed(() =>
-  props.items.find((item) => item.id === props.selectedId),
-)
-
-const actionLabels: Record<MenuAction['type'], string> = {
+const actionLabels: Record<Exclude<MenuAction['type'], 'group'>, string> = {
   program: 'Programa',
   directory: 'Diretório',
   url: 'URL',
@@ -32,28 +30,39 @@ const systemLabels: Record<SystemActionTarget, string> = {
   notepad: 'Bloco de notas',
 }
 
-function actionValue(action: MenuAction) {
-  if (action.type === 'program' || action.type === 'directory') return action.path
-  if (action.type === 'url') return action.url
-  return systemLabels[action.target]
+function itemSubtitle(item: MenuItem) {
+  const action = item.action
+  if (action.type === 'group') {
+    const count = action.items.length
+    return `${count} ${count === 1 ? 'item' : 'itens'}`
+  }
+  if (action.type === 'program' || action.type === 'directory') {
+    return `${actionLabels[action.type]} · ${action.path}`
+  }
+  if (action.type === 'url') return `${actionLabels.url} · ${action.url}`
+  return `${actionLabels.system} · ${systemLabels[action.target]}`
 }
 </script>
 
 <template>
   <section class="items-panel" aria-labelledby="items-title">
+    <div v-if="groupLabel" class="items-panel__breadcrumb">
+      <button type="button" @click="emit('back')">← Voltar</button>
+      <span>Grupo: <strong>{{ groupLabel }}</strong></span>
+    </div>
+
     <div class="items-panel__heading">
       <div>
-        <span>AÇÕES CONFIGURADAS</span>
-        <h2 id="items-title">Itens do menu</h2>
+        <span>{{ groupLabel ? 'ITENS DO GRUPO' : 'MENU PRINCIPAL' }}</span>
+        <h2 id="items-title">{{ groupLabel ? groupLabel : 'Itens do menu' }}</h2>
       </div>
-      <small>{{ items.length }}</small>
+      <small>{{ items.length }}/10</small>
     </div>
 
     <div v-if="items.length" class="items-panel__list">
-      <button
+      <article
         v-for="item in items"
         :key="item.id"
-        type="button"
         class="items-panel__item"
         :class="{ 'is-selected': item.id === selectedId }"
         @click="emit('select', item.id)"
@@ -61,36 +70,40 @@ function actionValue(action: MenuAction) {
         <span class="items-panel__icon" :style="{ '--item-accent': item.accent }">
           {{ item.icon }}
         </span>
+
         <span class="items-panel__copy">
-          <strong>{{ item.label }}</strong>
-          <small>{{ actionLabels[item.action.type] }} · {{ actionValue(item.action) }}</small>
+          <span class="items-panel__title">
+            <strong>{{ item.label }}</strong>
+            <em :class="{ 'is-group': item.action.type === 'group' }">
+              {{ item.action.type === 'group' ? 'Grupo' : 'Ação' }}
+            </em>
+          </span>
+          <small>{{ itemSubtitle(item) }}</small>
+          <span class="items-panel__controls">
+            <button type="button" @click.stop="emit('edit', item)">Editar</button>
+            <button
+              type="button"
+              class="is-danger"
+              @click.stop="emit('remove', item.id)"
+            >
+              Excluir
+            </button>
+            <button
+              v-if="item.action.type === 'group'"
+              type="button"
+              class="is-open"
+              @click.stop="emit('openGroup', item.id)"
+            >
+              Abrir grupo
+            </button>
+          </span>
         </span>
-        <span class="items-panel__chevron" aria-hidden="true">›</span>
-      </button>
+      </article>
     </div>
 
     <div v-else class="items-panel__empty">
-      <strong>Nenhuma ação configurada</strong>
+      <strong>{{ groupLabel ? 'Este grupo está vazio' : 'Nenhum item configurado' }}</strong>
       <span>Use “Adicionar ação” no preview para começar.</span>
-    </div>
-
-    <div class="items-panel__actions">
-      <button
-        type="button"
-        class="button-secondary"
-        :disabled="!selectedItem"
-        @click="selectedItem && emit('edit', selectedItem)"
-      >
-        Editar
-      </button>
-      <button
-        type="button"
-        class="button-danger"
-        :disabled="!selectedItem"
-        @click="selectedItem && emit('remove', selectedItem.id)"
-      >
-        Remover
-      </button>
     </div>
   </section>
 </template>
@@ -99,7 +112,7 @@ function actionValue(action: MenuAction) {
 .items-panel {
   display: flex;
   min-height: 0;
-  padding: 24px;
+  padding: 20px;
   flex-direction: column;
   border: 1px solid rgb(255 255 255 / 8%);
   border-radius: 22px;
@@ -107,54 +120,96 @@ function actionValue(action: MenuAction) {
   box-shadow: 0 24px 70px rgb(0 0 0 / 20%);
 }
 
+.items-panel__breadcrumb {
+  display: flex;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  align-items: center;
+  border-bottom: 1px solid rgb(255 255 255 / 7%);
+  gap: 10px;
+}
+
+.items-panel__breadcrumb button {
+  padding: 4px 8px;
+  border: 1px solid rgb(139 124 255 / 22%);
+  border-radius: 8px;
+  color: #bdb7ff;
+  background: rgb(139 124 255 / 8%);
+  cursor: pointer;
+}
+
+.items-panel__breadcrumb span {
+  overflow: hidden;
+  color: #777c91;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.items-panel__breadcrumb strong {
+  color: #c8c5d8;
+}
+
 .items-panel__heading {
   display: flex;
-  margin-bottom: 18px;
+  margin-bottom: 13px;
   align-items: center;
   justify-content: space-between;
 }
 
 .items-panel__heading span {
   color: #8d82ff;
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.14em;
 }
 
 h2 {
-  margin: 4px 0 0;
-  font-size: 20px;
+  margin: 3px 0 0;
+  font-size: 18px;
 }
 
 .items-panel__heading small {
-  display: grid;
-  width: 29px;
-  height: 29px;
-  place-items: center;
-  border-radius: 9px;
+  padding: 6px 8px;
+  border-radius: 8px;
   color: #a5a9bb;
   background: rgb(255 255 255 / 5%);
-  font-size: 11px;
+  font-size: 10px;
 }
 
 .items-panel__list {
   min-height: 0;
   padding-right: 4px;
   overflow-y: auto;
+  scrollbar-color: rgb(139 124 255 / 35%) rgb(255 255 255 / 4%);
+  scrollbar-width: thin;
+}
+
+.items-panel__list::-webkit-scrollbar {
+  width: 7px;
+}
+
+.items-panel__list::-webkit-scrollbar-track {
+  border-radius: 999px;
+  background: rgb(255 255 255 / 4%);
+}
+
+.items-panel__list::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgb(139 124 255 / 35%);
 }
 
 .items-panel__item {
   display: flex;
-  width: 100%;
-  padding: 10px;
+  min-height: 55px;
+  padding: 6px 9px;
   align-items: center;
-  border: 1px solid transparent;
-  border-radius: 13px;
+  border: 1px solid rgb(255 255 255 / 5%);
+  border-radius: 12px;
   color: #eef0fa;
-  text-align: left;
-  background: transparent;
+  background: rgb(255 255 255 / 2%);
   cursor: pointer;
-  gap: 11px;
+  gap: 10px;
 }
 
 .items-panel__item + .items-panel__item {
@@ -162,23 +217,24 @@ h2 {
 }
 
 .items-panel__item:hover {
+  border-color: rgb(255 255 255 / 10%);
   background: rgb(255 255 255 / 4%);
 }
 
 .items-panel__item.is-selected {
-  border-color: rgb(139 124 255 / 24%);
-  background: rgb(139 124 255 / 9%);
+  border-color: rgb(139 124 255 / 30%);
+  background: rgb(139 124 255 / 8%);
 }
 
 .items-panel__icon {
   --item-accent: #8b7cff;
   display: grid;
-  width: 39px;
-  height: 39px;
+  width: 38px;
+  height: 38px;
   flex: 0 0 auto;
   place-items: center;
   border: 1px solid color-mix(in srgb, var(--item-accent) 38%, transparent);
-  border-radius: 12px;
+  border-radius: 11px;
   color: color-mix(in srgb, var(--item-accent) 66%, white);
   background: color-mix(in srgb, var(--item-accent) 10%, transparent);
   font-size: 11px;
@@ -190,28 +246,81 @@ h2 {
   min-width: 0;
   flex: 1;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
 }
 
-.items-panel__copy strong,
-.items-panel__copy small {
+.items-panel__title,
+.items-panel__controls {
+  display: flex;
+  align-items: center;
+}
+
+.items-panel__title {
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.items-panel__title strong,
+.items-panel__copy > small {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.items-panel__copy strong {
-  font-size: 12px;
+.items-panel__title strong {
+  font-size: 11px;
 }
 
-.items-panel__copy small {
+.items-panel__title em {
+  padding: 3px 6px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  color: #858a9e;
+  background: rgb(255 255 255 / 5%);
+  font-size: 7px;
+  font-style: normal;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.items-panel__title em.is-group {
+  color: #bcb6ff;
+  background: rgb(139 124 255 / 11%);
+}
+
+.items-panel__copy > small {
   color: #777c91;
-  font-size: 9px;
+  font-size: 8px;
 }
 
-.items-panel__chevron {
-  color: #555b70;
-  font-size: 22px;
+.items-panel__controls {
+  gap: 5px;
+}
+
+.items-panel__controls button {
+  padding: 3px 6px;
+  border: 1px solid rgb(255 255 255 / 8%);
+  border-radius: 6px;
+  color: #aeb2c2;
+  background: rgb(255 255 255 / 3%);
+  font-size: 7px;
+  cursor: pointer;
+}
+
+.items-panel__controls button:hover {
+  color: #e2e4ee;
+  border-color: rgb(255 255 255 / 15%);
+}
+
+.items-panel__controls button.is-danger {
+  color: #ff9bae;
+  border-color: rgb(255 100 126 / 14%);
+}
+
+.items-panel__controls button.is-open {
+  color: #bdb7ff;
+  border-color: rgb(139 124 255 / 20%);
 }
 
 .items-panel__empty {
@@ -231,35 +340,5 @@ h2 {
 
 .items-panel__empty span {
   font-size: 10px;
-}
-
-.items-panel__actions {
-  display: flex;
-  padding-top: 16px;
-  border-top: 1px solid rgb(255 255 255 / 7%);
-  gap: 9px;
-}
-
-.items-panel__actions button {
-  padding: 9px 16px;
-  border-radius: 9px;
-  cursor: pointer;
-}
-
-.button-secondary {
-  border: 1px solid rgb(255 255 255 / 11%);
-  color: #d8dae5;
-  background: rgb(255 255 255 / 5%);
-}
-
-.button-danger {
-  border: 1px solid rgb(255 100 126 / 20%);
-  color: #ff9bae;
-  background: rgb(255 80 112 / 7%);
-}
-
-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.38;
 }
 </style>

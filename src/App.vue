@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import RadialMenu from './components/RadialMenu.vue'
@@ -14,7 +14,16 @@ import type {
 
 const menuConfig = ref<MenuConfig>({ shortcut: 'Ctrl+Space', items: [] })
 const phase = ref<'entering' | 'visible' | 'leaving'>('entering')
-const centerAction: CenterAction = 'close'
+const navigationStack = ref<MenuItem[]>([])
+const currentGroup = computed(() => navigationStack.value.at(-1) ?? null)
+const visibleItems = computed(() =>
+  currentGroup.value?.action.type === 'group'
+    ? currentGroup.value.action.items
+    : menuConfig.value.items,
+)
+const centerAction = computed<CenterAction>(() =>
+  navigationStack.value.length ? 'back' : 'close',
+)
 const { execute, isExecuting, error } = useMenuActions()
 const { stats, start: startStats, stop: stopStats } = useSystemStats()
 const unlisteners: UnlistenFn[] = []
@@ -22,6 +31,7 @@ let hideTimer: number | undefined
 
 function showAnimation() {
   window.clearTimeout(hideTimer)
+  navigationStack.value = []
   startStats()
   phase.value = 'entering'
   requestAnimationFrame(() => {
@@ -42,6 +52,11 @@ function dismiss() {
 }
 
 async function selectItem(item: MenuItem) {
+  if (item.action.type === 'group') {
+    navigationStack.value = [item]
+    return
+  }
+
   try {
     await execute(item.action)
     dismiss()
@@ -55,14 +70,19 @@ async function selectItem(item: MenuItem) {
 function onKeydown(event: KeyboardEvent) {
   if (event.key !== 'Escape') return
 
-  // Future groups: pop navigationStack here when it is not empty;
-  // Escape only dismisses the launcher while on the main menu.
-  dismiss()
+  if (navigationStack.value.length) {
+    navigationStack.value = []
+  } else {
+    dismiss()
+  }
 }
 
 function handleCenterAction(action: CenterAction) {
-  // Future groups: the "back" action will pop navigationStack.
-  if (action === 'close') dismiss()
+  if (action === 'back') {
+    navigationStack.value = []
+  } else {
+    dismiss()
+  }
 }
 
 function onWindowBlur() {
@@ -86,6 +106,7 @@ onMounted(async () => {
   }
 
   unlisteners.push(await listen<MenuConfig>('launcher-config-updated', (event) => {
+    navigationStack.value = []
     menuConfig.value = {
       ...event.payload,
       shortcut: menuConfig.value.shortcut,
@@ -114,11 +135,12 @@ onBeforeUnmount(() => {
 <template>
   <main>
     <RadialMenu
-      :items="menuConfig.items"
+      :items="visibleItems"
       :phase="phase"
       :stats="stats"
       :disabled="isExecuting"
       :center-action="centerAction"
+      :level-key="currentGroup?.id ?? 'main'"
       @select="selectItem"
       @dismiss="dismiss"
       @center-action="handleCenterAction"
