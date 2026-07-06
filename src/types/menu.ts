@@ -25,13 +25,17 @@ export type SystemAction = {
   target: SystemActionTarget
 }
 
-// This union can later receive a recursive GroupAction
-// (`{ type: 'group', items: MenuItem[] }`) without changing existing actions.
+export type GroupAction = {
+  type: 'group'
+  items: MenuItem[]
+}
+
 export type MenuAction =
   | ProgramAction
   | DirectoryAction
   | UrlAction
   | SystemAction
+  | GroupAction
 
 export type MenuItem = {
   id: string
@@ -47,7 +51,7 @@ export type MenuConfig = {
   items: MenuItem[]
 }
 
-export const MAX_MAIN_MENU_ITEMS = 10
+export const MAX_MENU_ITEMS_PER_LEVEL = 10
 
 export type CenterAction = 'close' | 'back'
 

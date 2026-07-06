@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, watch } from 'vue'
+import { computed, reactive, toRaw, watch } from 'vue'
 import { open } from '@tauri-apps/plugin-dialog'
 import type {
   MenuAction,
@@ -9,6 +9,7 @@ import type {
 
 const props = defineProps<{
   item?: MenuItem | null
+  allowGroups: boolean
 }>()
 
 const emit = defineEmits<{
@@ -41,7 +42,11 @@ const form = reactive<FormState>({
 })
 
 const isEditing = computed(() => Boolean(props.item))
-const requiresValue = computed(() => form.actionType !== 'system')
+const editingGroup = computed(() => props.item?.action.type === 'group')
+const isGroup = computed(() => form.actionType === 'group')
+const requiresValue = computed(() =>
+  form.actionType !== 'system' && form.actionType !== 'group',
+)
 const canSave = computed(() =>
   form.label.trim()
   && form.hint.trim()
@@ -65,7 +70,7 @@ watch(
 )
 
 function getActionValue(action?: MenuAction) {
-  if (!action || action.type === 'system') return ''
+  if (!action || action.type === 'system' || action.type === 'group') return ''
   return action.type === 'url' ? action.url : action.path
 }
 
@@ -87,6 +92,12 @@ function buildAction(): MenuAction {
   if (form.actionType === 'program') return { type: 'program', path: form.value.trim() }
   if (form.actionType === 'directory') return { type: 'directory', path: form.value.trim() }
   if (form.actionType === 'url') return { type: 'url', url: form.value.trim() }
+  if (form.actionType === 'group') {
+    const items = props.item?.action.type === 'group'
+      ? structuredClone(toRaw(props.item.action.items))
+      : []
+    return { type: 'group', items }
+  }
   return { type: 'system', target: form.systemTarget }
 }
 
@@ -109,8 +120,8 @@ function submit() {
     <form class="item-modal" @submit.prevent="submit">
       <header>
         <div>
-          <span>{{ isEditing ? 'EDITAR AÇÃO' : 'NOVA AÇÃO' }}</span>
-          <h2>{{ isEditing ? 'Editar ação' : 'Adicionar ao menu radial' }}</h2>
+          <span>{{ isEditing ? (isGroup ? 'EDITAR GRUPO' : 'EDITAR AÇÃO') : (isGroup ? 'NOVO GRUPO' : 'NOVA AÇÃO') }}</span>
+          <h2>{{ isEditing ? (isGroup ? 'Editar grupo' : 'Editar ação') : 'Adicionar ao menu radial' }}</h2>
         </div>
         <button type="button" class="item-modal__close" aria-label="Fechar" @click="emit('cancel')">
           ×
@@ -143,11 +154,12 @@ function submit() {
 
         <label class="item-modal__wide">
           <span>Tipo de ação</span>
-          <select v-model="form.actionType">
+          <select v-model="form.actionType" :disabled="editingGroup">
             <option value="program">Abrir programa</option>
             <option value="directory">Abrir diretório</option>
             <option value="url">Abrir URL</option>
             <option value="system">Ação padrão do sistema</option>
+            <option v-if="allowGroups || isGroup" value="group">Grupo</option>
           </select>
         </label>
 
@@ -161,6 +173,10 @@ function submit() {
             <option value="notepad">Bloco de notas</option>
           </select>
         </label>
+
+        <div v-else-if="form.actionType === 'group'" class="item-modal__wide group-note">
+          Os itens poderão ser adicionados depois, ao abrir o grupo na configuração.
+        </div>
 
         <label v-else class="item-modal__wide">
           <span>
@@ -194,7 +210,7 @@ function submit() {
       <footer>
         <button type="button" class="button-cancel" @click="emit('cancel')">Cancelar</button>
         <button type="submit" class="button-save" :disabled="!canSave">
-          {{ isEditing ? 'Salvar alterações' : 'Adicionar ação' }}
+          {{ isEditing ? 'Salvar alterações' : (isGroup ? 'Adicionar grupo' : 'Adicionar ação') }}
         </button>
       </footer>
     </form>
@@ -284,6 +300,16 @@ label > span:first-child {
   grid-column: 1 / -1;
 }
 
+.group-note {
+  padding: 12px 14px;
+  border: 1px solid rgb(139 124 255 / 18%);
+  border-radius: 9px;
+  color: #8f94aa;
+  background: rgb(139 124 255 / 6%);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
 input,
 select {
   width: 100%;
@@ -301,6 +327,11 @@ input:focus,
 select:focus {
   border-color: rgb(139 124 255 / 70%);
   box-shadow: 0 0 0 3px rgb(139 124 255 / 11%);
+}
+
+select:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
 }
 
 input[type="color"] {

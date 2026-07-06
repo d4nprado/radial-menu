@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { invoke } from '@tauri-apps/api/core'
-import { onMounted, ref, toRaw } from 'vue'
+import { computed, onMounted, ref, toRaw } from 'vue'
 import {
-  MAX_MAIN_MENU_ITEMS,
+  MAX_MENU_ITEMS_PER_LEVEL,
   type ConfigLoadResponse,
   type MenuItem,
 } from '../types/menu'
@@ -17,6 +17,16 @@ function cloneItems(items: MenuItem[]) {
 
 const shortcut = ref('Ctrl+Space')
 const items = ref<MenuItem[]>([])
+const currentGroupId = ref<string | null>(null)
+const currentGroup = computed(() => {
+  const item = items.value.find((candidate) => candidate.id === currentGroupId.value)
+  return item?.action.type === 'group' ? item : null
+})
+const currentItems = computed(() =>
+  currentGroup.value?.action.type === 'group'
+    ? currentGroup.value.action.items
+    : items.value,
+)
 const selectedId = ref<string | null>(null)
 const formMode = ref<'add' | 'edit' | null>(null)
 const editingItem = ref<MenuItem | null>(null)
@@ -37,6 +47,7 @@ async function loadConfig() {
     const response = await invoke<ConfigLoadResponse>('load_launcher_config')
     shortcut.value = response.config.shortcut
     items.value = cloneItems(response.config.items)
+    currentGroupId.value = null
     selectedId.value = items.value[0]?.id ?? null
     setStatus(response.warning ?? 'Configuração carregada', response.warning ? 'error' : 'neutral')
   } catch (cause) {
@@ -55,8 +66,8 @@ function selectItem(id: string) {
 }
 
 function openAddForm() {
-  if (items.value.length >= MAX_MAIN_MENU_ITEMS) {
-    setStatus('Limite de 10 ações no menu principal', 'error')
+  if (currentItems.value.length >= MAX_MENU_ITEMS_PER_LEVEL) {
+    setStatus('Limite de 10 itens neste nível', 'error')
     return
   }
 
@@ -87,7 +98,7 @@ function createItemId(label: string) {
   let id = base
   let suffix = 2
 
-  while (items.value.some((item) => item.id === id)) {
+  while (currentItems.value.some((item) => item.id === id)) {
     id = `${base}-${suffix}`
     suffix += 1
   }
@@ -97,21 +108,21 @@ function createItemId(label: string) {
 function saveItem(item: MenuItem) {
   if (formMode.value === 'edit') {
     const originalId = editingOriginalId.value
-    const index = items.value.findIndex((current) => current.id === originalId)
+    const index = currentItems.value.findIndex((current) => current.id === originalId)
     if (index < 0 || !originalId) {
       setStatus('O item que estava sendo editado não foi encontrado.', 'error')
       return
     }
     item.id = originalId
-    items.value[index] = item
+    currentItems.value[index] = item
   } else {
-    if (items.value.length >= MAX_MAIN_MENU_ITEMS) {
-      setStatus('Limite de 10 ações no menu principal', 'error')
+    if (currentItems.value.length >= MAX_MENU_ITEMS_PER_LEVEL) {
+      setStatus('Limite de 10 itens neste nível', 'error')
       closeForm()
       return
     }
     item.id = createItemId(item.label)
-    items.value.push(item)
+    currentItems.value.push(item)
   }
 
   selectedId.value = item.id
@@ -124,24 +135,51 @@ function reorderItems(fromIndex: number, toIndex: number) {
     fromIndex === toIndex
     || fromIndex < 0
     || toIndex < 0
-    || fromIndex >= items.value.length
-    || toIndex >= items.value.length
+    || fromIndex >= currentItems.value.length
+    || toIndex >= currentItems.value.length
   ) return
 
-  const [movedItem] = items.value.splice(fromIndex, 1)
+  const [movedItem] = currentItems.value.splice(fromIndex, 1)
   if (!movedItem) return
-  items.value.splice(toIndex, 0, movedItem)
+  currentItems.value.splice(toIndex, 0, movedItem)
   selectedId.value = movedItem.id
   setStatus('Alterações ainda não salvas')
 }
 
 function removeItem(id: string) {
-  const index = items.value.findIndex((item) => item.id === id)
+  const index = currentItems.value.findIndex((item) => item.id === id)
   if (index < 0) return
 
-  items.value.splice(index, 1)
-  selectedId.value = items.value[index]?.id ?? items.value[index - 1]?.id ?? null
+  const item = currentItems.value[index]
+  if (
+    item?.action.type === 'group'
+    && !window.confirm(
+      item.action.items.length === 1
+        ? `Excluir o grupo “${item.label}”? O item dentro dele também será removido.`
+        : `Excluir o grupo “${item.label}”? Os ${item.action.items.length} itens dentro dele também serão removidos.`,
+    )
+  ) return
+
+  currentItems.value.splice(index, 1)
+  selectedId.value =
+    currentItems.value[index]?.id
+    ?? currentItems.value[index - 1]?.id
+    ?? null
   setStatus('Alterações ainda não salvas')
+}
+
+function openGroup(id: string) {
+  const group = items.value.find((item) => item.id === id)
+  if (group?.action.type !== 'group') return
+
+  currentGroupId.value = group.id
+  selectedId.value = group.action.items[0]?.id ?? null
+}
+
+function closeGroup() {
+  const groupId = currentGroupId.value
+  currentGroupId.value = null
+  selectedId.value = groupId
 }
 
 async function saveConfig() {
@@ -187,19 +225,25 @@ onMounted(loadConfig)
 
     <div class="config-content">
       <RadialMenuPreview
-        :items="items"
+        :items="currentItems"
         :selected-id="selectedId"
-        :max-items="MAX_MAIN_MENU_ITEMS"
+        :max-items="MAX_MENU_ITEMS_PER_LEVEL"
+        :group-label="currentGroup?.label ?? null"
         @select="selectItem"
         @add="openAddForm"
         @reorder="reorderItems"
+        @open-group="openGroup"
+        @back="closeGroup"
       />
       <MenuItemsPanel
-        :items="items"
+        :items="currentItems"
         :selected-id="selectedId"
+        :group-label="currentGroup?.label ?? null"
         @select="selectItem"
         @edit="openEditForm"
         @remove="removeItem"
+        @open-group="openGroup"
+        @back="closeGroup"
       />
     </div>
 
@@ -218,6 +262,7 @@ onMounted(loadConfig)
     <MenuItemFormModal
       v-if="formMode"
       :item="editingItem"
+      :allow-groups="!currentGroup"
       @save="saveItem"
       @cancel="closeForm"
     />
@@ -229,8 +274,8 @@ onMounted(loadConfig)
 <style scoped>
 .config-window {
   display: grid;
-  min-width: 980px;
-  min-height: 680px;
+  min-width: 1080px;
+  min-height: 740px;
   padding: 0 34px 22px;
   overflow: auto;
   grid-template-rows: 92px minmax(0, 1fr) 70px;
@@ -309,7 +354,7 @@ h1 {
   display: grid;
   min-height: 0;
   padding: 24px 0;
-  grid-template-columns: minmax(540px, 1.35fr) minmax(340px, 0.65fr);
+  grid-template-columns: minmax(560px, 1.25fr) minmax(420px, 0.75fr);
   gap: 20px;
 }
 
@@ -413,9 +458,9 @@ h1 {
   cursor: pointer;
 }
 
-@media (max-width: 940px) {
+@media (max-width: 1140px) {
   .config-content {
-    grid-template-columns: minmax(500px, 1fr) minmax(320px, 0.72fr);
+    grid-template-columns: minmax(520px, 1fr) minmax(390px, 0.75fr);
   }
 }
 </style>
