@@ -47,8 +47,3 @@ preferências e é salvo separadamente em `app-preferences.json`.
 - `src-tauri/src/commands.rs`: fronteira nativa com validação dos caminhos;
 - `src-tauri/src/system_stats.rs`: coleta assíncrona de CPU, RAM, disco e rede;
 - `src-tauri/src/lib.rs`: inicialização e registro do atalho global.
-
-Para adicionar OBS futuramente, crie um novo tipo em `MenuAction` e registre seu
-executor no composable, mantendo o transporte WebSocket em um módulo dedicado.
-Mouse 4/5 poderá entrar como outra fonte de acionamento no backend e chamar a
-mesma função `show_window_at_cursor`; a lógica do menu não depende do teclado.
