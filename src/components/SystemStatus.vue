@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import type { SystemStats } from '../types/systemStats'
+import type { CenterAction } from '../types/menu'
 
 const props = defineProps<{
   stats: SystemStats | null
+  centerAction: CenterAction
 }>()
 
 function percent(value: number | null | undefined) {
@@ -54,7 +56,8 @@ function rate(bytes: number | null | undefined) {
       <span class="is-upload">↑ {{ rate(props.stats?.uploadBytesPerSecond) }}</span>
     </div>
 
-    <!-- Reserved for a future group name, back action, or navigation hint. -->
-    <div class="system-status__context" aria-hidden="true" />
+    <div class="system-status__context">
+      {{ centerAction === 'back' ? 'Voltar' : 'Fechar' }}
+    </div>
   </div>
 </template>

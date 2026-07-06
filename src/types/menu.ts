@@ -49,6 +49,8 @@ export type MenuConfig = {
 
 export const MAX_MAIN_MENU_ITEMS = 10
 
+export type CenterAction = 'close' | 'back'
+
 export type ConfigLoadResponse = {
   config: MenuConfig
   warning: string | null

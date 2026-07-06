@@ -6,6 +6,7 @@ import RadialMenu from './components/RadialMenu.vue'
 import { useMenuActions } from './composables/useMenuActions'
 import { useSystemStats } from './composables/useSystemStats'
 import type {
+  CenterAction,
   MenuConfig,
   MenuItem,
   PreferencesLoadResponse,
@@ -13,6 +14,7 @@ import type {
 
 const menuConfig = ref<MenuConfig>({ shortcut: 'Ctrl+Space', items: [] })
 const phase = ref<'entering' | 'visible' | 'leaving'>('entering')
+const centerAction: CenterAction = 'close'
 const { execute, isExecuting, error } = useMenuActions()
 const { stats, start: startStats, stop: stopStats } = useSystemStats()
 const unlisteners: UnlistenFn[] = []
@@ -51,7 +53,16 @@ async function selectItem(item: MenuItem) {
 }
 
 function onKeydown(event: KeyboardEvent) {
-  if (event.key === 'Escape') dismiss()
+  if (event.key !== 'Escape') return
+
+  // Future groups: pop navigationStack here when it is not empty;
+  // Escape only dismisses the launcher while on the main menu.
+  dismiss()
+}
+
+function handleCenterAction(action: CenterAction) {
+  // Future groups: the "back" action will pop navigationStack.
+  if (action === 'close') dismiss()
 }
 
 function onWindowBlur() {
@@ -107,8 +118,10 @@ onBeforeUnmount(() => {
       :phase="phase"
       :stats="stats"
       :disabled="isExecuting"
+      :center-action="centerAction"
       @select="selectItem"
       @dismiss="dismiss"
+      @center-action="handleCenterAction"
     />
 
     <Transition name="toast">

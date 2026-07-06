@@ -1,19 +1,23 @@
 <script setup lang="ts">
-import type { MenuItem } from '../types/menu'
+import type { CenterAction, MenuItem } from '../types/menu'
 import type { SystemStats } from '../types/systemStats'
 import RadialMenuItem from './RadialMenuItem.vue'
 import SystemStatus from './SystemStatus.vue'
 
-defineProps<{
+withDefaults(defineProps<{
   items: MenuItem[]
   phase: 'entering' | 'visible' | 'leaving'
   stats: SystemStats | null
   disabled?: boolean
-}>()
+  centerAction?: CenterAction
+}>(), {
+  centerAction: 'close',
+})
 
 defineEmits<{
   select: [item: MenuItem]
   dismiss: []
+  centerAction: [action: CenterAction]
 }>()
 </script>
 
@@ -37,8 +41,12 @@ defineEmits<{
         Nenhuma ação configurada
       </p>
 
-      <button class="radial-center" aria-label="Fechar menu" @click.stop="$emit('dismiss')">
-        <SystemStatus :stats="stats" />
+      <button
+        class="radial-center"
+        :aria-label="centerAction === 'back' ? 'Voltar ao menu anterior' : 'Fechar menu'"
+        @click.stop="$emit('centerAction', centerAction)"
+      >
+        <SystemStatus :stats="stats" :center-action="centerAction" />
       </button>
     </div>
   </div>
