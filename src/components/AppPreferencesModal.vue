@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { invoke } from '@tauri-apps/api/core'
-import { onMounted, ref } from 'vue'
+import { listen, type UnlistenFn } from '@tauri-apps/api/event'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import type { AppPreferences, PreferencesLoadResponse } from '../types/menu'
 
 const DEFAULT_SHORTCUT = 'Ctrl+Space'
@@ -10,17 +11,34 @@ function defaultPreferences(): AppPreferences {
   return {
     startWithWindows: false,
     openMenuShortcut: { type: 'keyboard', value: DEFAULT_SHORTCUT },
-    futureMouseShortcut: { enabled: false, button: null },
   }
 }
 
 const preferences = ref<AppPreferences>(defaultPreferences())
-const capturedShortcut = ref(DEFAULT_SHORTCUT)
+const shortcutType = ref<'keyboard' | 'mouse'>('keyboard')
+const keyboardShortcut = ref(DEFAULT_SHORTCUT)
+const mouseShortcut = ref('Mouse4')
 const isCapturing = ref(false)
-const configPath = ref('Carregando…')
+const configPath = ref('Carregando caminho...')
 const busy = ref(true)
 const message = ref('')
 const isError = ref(false)
+const unlisteners: UnlistenFn[] = []
+
+const draftValue = computed(() =>
+  shortcutType.value === 'keyboard'
+    ? keyboardShortcut.value
+    : mouseShortcut.value,
+)
+const displayShortcut = computed(() =>
+  shortcutType.value === 'mouse'
+    ? draftValue.value.replace('Mouse', 'Mouse ')
+    : draftValue.value,
+)
+const shortcutChanged = computed(() =>
+  shortcutType.value !== preferences.value.openMenuShortcut.type
+  || draftValue.value !== preferences.value.openMenuShortcut.value,
+)
 
 function showMessage(text: string, error = false) {
   message.value = text
@@ -30,13 +48,14 @@ function showMessage(text: string, error = false) {
 async function load() {
   busy.value = true
   try {
-    const [response, path] = await Promise.all([
-      invoke<PreferencesLoadResponse>('get_app_preferences'),
-      invoke<string>('get_config_path'),
-    ])
+    const response = await invoke<PreferencesLoadResponse>('get_app_preferences')
     preferences.value = response.preferences
-    capturedShortcut.value = response.preferences.openMenuShortcut.value
-    configPath.value = path
+    shortcutType.value = response.preferences.openMenuShortcut.type
+    if (response.preferences.openMenuShortcut.type === 'keyboard') {
+      keyboardShortcut.value = response.preferences.openMenuShortcut.value
+    } else {
+      mouseShortcut.value = response.preferences.openMenuShortcut.value
+    }
     if (response.warning) showMessage(response.warning, true)
   } catch (cause) {
     showMessage(
@@ -45,6 +64,26 @@ async function load() {
     )
   } finally {
     busy.value = false
+  }
+
+  void loadConfigPath()
+  void refreshAutostart()
+}
+
+async function loadConfigPath() {
+  try {
+    configPath.value = await invoke<string>('get_config_path')
+  } catch {
+    configPath.value = 'Caminho indisponível'
+  }
+}
+
+async function refreshAutostart() {
+  try {
+    preferences.value.startWithWindows =
+      await invoke<boolean>('get_autostart_enabled')
+  } catch {
+    // O estado persistido continua disponível mesmo se o plugin falhar em dev.
   }
 }
 
@@ -73,6 +112,12 @@ async function updateAutostart(event: Event) {
 }
 
 function captureShortcut(event: KeyboardEvent) {
+  if (!isCapturing.value) return
+  if (event.key === 'Escape') {
+    void cancelCapture()
+    return
+  }
+
   const ignored = ['Control', 'Shift', 'Alt', 'Meta', 'AltGraph']
   if (ignored.includes(event.key)) {
     isCapturing.value = true
@@ -95,28 +140,65 @@ function captureShortcut(event: KeyboardEvent) {
   if (event.metaKey) parts.push('Super')
   parts.push(key)
 
-  capturedShortcut.value = parts.join('+')
-  isCapturing.value = false
+  keyboardShortcut.value = parts.join('+')
+  shortcutType.value = 'keyboard'
+  void cancelCapture()
   showMessage('Novo atalho capturado. Clique em “Salvar atalho” para aplicar.')
 }
 
+async function startCapture() {
+  isCapturing.value = true
+  showMessage('Pressione uma combinação de teclas ou Mouse 3/4/5...')
+  try {
+    await invoke('start_mouse_shortcut_capture')
+  } catch (cause) {
+    isCapturing.value = false
+    showMessage(
+      typeof cause === 'string'
+        ? cause
+        : 'Não foi possível iniciar a captura do mouse.',
+      true,
+    )
+  }
+}
+
+async function cancelCapture(showFeedback = false) {
+  if (!isCapturing.value) return
+  isCapturing.value = false
+  try {
+    await invoke('cancel_mouse_shortcut_capture')
+  } finally {
+    if (showFeedback) showMessage('Captura cancelada.')
+  }
+}
+
 async function saveShortcut() {
-  busy.value = true
-  const previous = preferences.value.openMenuShortcut.value
+  const previous: AppPreferences = {
+    startWithWindows: preferences.value.startWithWindows,
+    openMenuShortcut: { ...preferences.value.openMenuShortcut },
+  }
+  const value = draftValue.value
   const nextPreferences: AppPreferences = {
     ...preferences.value,
     openMenuShortcut: {
-      type: 'keyboard',
-      value: capturedShortcut.value,
+      type: shortcutType.value,
+      value,
     },
   }
 
+  busy.value = true
   try {
     await invoke('save_app_preferences', { preferences: nextPreferences })
     preferences.value = nextPreferences
-    showMessage(`Atalho ${capturedShortcut.value} aplicado.`)
+    showMessage(`Atalho ${value} aplicado.`)
   } catch (cause) {
-    capturedShortcut.value = previous
+    preferences.value = previous
+    shortcutType.value = previous.openMenuShortcut.type
+    if (previous.openMenuShortcut.type === 'keyboard') {
+      keyboardShortcut.value = previous.openMenuShortcut.value
+    } else {
+      mouseShortcut.value = previous.openMenuShortcut.value
+    }
     showMessage(
       typeof cause === 'string' ? cause : 'Não foi possível aplicar o atalho.',
       true,
@@ -142,9 +224,12 @@ async function restoreDefaults() {
   const defaults = defaultPreferences()
 
   try {
+    await cancelCapture()
     await invoke('save_app_preferences', { preferences: defaults })
     preferences.value = defaults
-    capturedShortcut.value = DEFAULT_SHORTCUT
+    shortcutType.value = 'keyboard'
+    keyboardShortcut.value = DEFAULT_SHORTCUT
+    mouseShortcut.value = 'Mouse4'
     showMessage('Preferências restauradas')
 
     try {
@@ -168,7 +253,36 @@ async function restoreDefaults() {
   }
 }
 
-onMounted(load)
+async function setupCaptureListeners() {
+  try {
+    unlisteners.push(await listen<string>('mouse-shortcut-captured', (event) => {
+      shortcutType.value = 'mouse'
+      mouseShortcut.value = event.payload
+      isCapturing.value = false
+      showMessage(`${event.payload.replace('Mouse', 'Mouse ')} capturado. Clique em “Salvar atalho”.`)
+    }))
+  } catch (cause) {
+    console.error('Não foi possível escutar a captura do mouse:', cause)
+  }
+
+  try {
+    unlisteners.push(await listen<string>('mouse-shortcut-capture-error', (event) => {
+      if (isCapturing.value) showMessage(event.payload, true)
+    }))
+  } catch (cause) {
+    console.error('Não foi possível escutar erros da captura do mouse:', cause)
+  }
+}
+
+onMounted(() => {
+  void load()
+  void setupCaptureListeners()
+})
+
+onBeforeUnmount(() => {
+  void cancelCapture()
+  unlisteners.forEach((unlisten) => unlisten())
+})
 </script>
 
 <template>
@@ -200,29 +314,43 @@ onMounted(load)
         <section class="shortcut-section">
           <div class="section-heading">
             <span>ATALHO DO LAUNCHER</span>
-            <b>Teclado</b>
           </div>
-          <button
-            type="button"
-            class="shortcut-capture"
-            :class="{ capturing: isCapturing }"
-            :disabled="busy"
-            @focus="isCapturing = true"
-            @blur="isCapturing = false"
-            @keydown.prevent.stop="captureShortcut"
-          >
-            <small>{{ isCapturing ? 'Pressione uma combinação…' : 'Clique e pressione uma combinação' }}</small>
-            <kbd>{{ capturedShortcut }}</kbd>
-          </button>
+
+          <div class="capture-row">
+            <button
+              type="button"
+              class="shortcut-capture"
+              :class="{ capturing: isCapturing }"
+              :disabled="busy"
+              @click="startCapture"
+              @keydown.prevent.stop="captureShortcut"
+            >
+              <small>
+                {{ isCapturing
+                  ? 'Pressione uma combinação de teclas ou Mouse 3/4/5...'
+                  : 'Clique aqui e pressione uma tecla ou botão do mouse' }}
+              </small>
+              <kbd>{{ displayShortcut }}</kbd>
+            </button>
+            <button
+              v-if="isCapturing"
+              type="button"
+              class="cancel-capture"
+              @click="cancelCapture(true)"
+            >
+              Cancelar
+            </button>
+          </div>
+
           <button
             type="button"
             class="save-shortcut"
-            :disabled="busy || capturedShortcut === preferences.openMenuShortcut.value"
+            :disabled="busy || isCapturing || !shortcutChanged"
             @click="saveShortcut"
           >
             Salvar atalho
           </button>
-          <p>Suporte a Mouse 4/5 será adicionado em uma próxima etapa.</p>
+          <p>Use uma combinação de teclado ou Mouse 3/4/5.</p>
         </section>
 
         <div class="path">
@@ -265,5 +393,25 @@ onMounted(load)
   border: 2px solid #151827;
   border-radius: 999px;
   background: #3a3f55;
+}
+
+.capture-row {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.capture-row .shortcut-capture {
+  width: auto;
+  flex: 1;
+}
+
+.cancel-capture {
+  padding: 0 11px;
+  border: 1px solid #ffffff1a;
+  border-radius: 9px;
+  color: #bfc2d0;
+  background: transparent;
+  cursor: pointer;
 }
 </style>

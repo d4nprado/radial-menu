@@ -4,6 +4,8 @@
   "description": "Permissões da janela de configuração do launcher",
   "windows": ["settings"],
   "permissions": [
-    "dialog:allow-open"
+    "dialog:allow-open",
+    "core:event:allow-listen",
+    "core:event:allow-unlisten"
   ]
 }

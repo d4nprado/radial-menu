@@ -1,5 +1,6 @@
 mod commands;
 mod config;
+mod mouse_shortcut;
 mod system_stats;
 
 use tauri::{
@@ -30,7 +31,7 @@ fn show_settings(app: &tauri::AppHandle) -> Result<(), String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .manage(system_stats::SystemStatsState::new())
         .manage(config::ShortcutRegistrationState::new())
         .plugin(tauri_plugin_dialog::init())
@@ -61,6 +62,15 @@ pub fn run() {
                 .build(),
         )
         .setup(|app| {
+            let mouse_manager =
+                match mouse_shortcut::MouseShortcutManager::start(app.handle().clone()) {
+                    Ok(manager) => manager,
+                    Err(error) => {
+                        eprintln!("Listener global do mouse indisponível: {error}");
+                        mouse_shortcut::MouseShortcutManager::unavailable(error)
+                    }
+                };
+            let _ = app.manage(mouse_manager);
             config::register_initial_shortcut(app.handle()).map_err(std::io::Error::other)?;
 
             let configure_item = MenuItem::with_id(
@@ -128,8 +138,16 @@ pub fn run() {
             config::save_app_preferences,
             config::set_autostart_enabled,
             config::get_autostart_enabled,
+            mouse_shortcut::start_mouse_shortcut_capture,
+            mouse_shortcut::cancel_mouse_shortcut_capture,
             system_stats::get_system_stats,
         ])
-        .run(tauri::generate_context!())
+        .build(tauri::generate_context!())
         .expect("erro ao iniciar o Orbit Launcher");
+
+    app.run(|app, event| {
+        if let tauri::RunEvent::Exit = event {
+            app.state::<mouse_shortcut::MouseShortcutManager>().stop();
+        }
+    });
 }

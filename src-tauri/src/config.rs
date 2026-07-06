@@ -1,3 +1,4 @@
+use crate::mouse_shortcut::MouseShortcutManager;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashSet,
@@ -65,10 +66,9 @@ pub enum SystemActionTarget {
 pub struct AppPreferences {
     pub start_with_windows: bool,
     pub open_menu_shortcut: OpenMenuShortcut,
-    pub future_mouse_shortcut: FutureMouseShortcut,
 }
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OpenMenuShortcut {
     #[serde(rename = "type")]
@@ -76,17 +76,11 @@ pub struct OpenMenuShortcut {
     pub value: String,
 }
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ShortcutType {
     Keyboard,
-}
-
-#[derive(Clone, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct FutureMouseShortcut {
-    pub enabled: bool,
-    pub button: Option<String>,
+    Mouse,
 }
 
 impl Default for AppPreferences {
@@ -96,10 +90,6 @@ impl Default for AppPreferences {
             open_menu_shortcut: OpenMenuShortcut {
                 shortcut_type: ShortcutType::Keyboard,
                 value: DEFAULT_SHORTCUT.into(),
-            },
-            future_mouse_shortcut: FutureMouseShortcut {
-                enabled: false,
-                button: None,
             },
         }
     }
@@ -266,15 +256,7 @@ pub fn open_config_directory(app: tauri::AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 pub fn get_app_preferences(app: tauri::AppHandle) -> Result<AppPreferencesResponse, String> {
-    let mut response = load_preferences_internal(&app)?;
-    response.preferences.start_with_windows = app.autolaunch().is_enabled().map_err(|error| {
-        config_error(
-            "Não foi possível consultar a inicialização com o sistema",
-            error,
-        )
-    })?;
-    write_json(&preferences_path(&app)?, &response.preferences)?;
-    Ok(response)
+    load_preferences_internal(&app)
 }
 
 #[tauri::command]
@@ -283,31 +265,26 @@ pub fn save_app_preferences(
     preferences: AppPreferences,
 ) -> Result<(), String> {
     let previous = load_preferences_internal(&app)?.preferences;
-    let previous_shortcut = previous.open_menu_shortcut.value;
-    let next_shortcut = preferences.open_menu_shortcut.value.trim().to_string();
-
-    if next_shortcut.is_empty() {
-        return Err("O atalho do menu não pode ficar vazio.".into());
-    }
+    let previous_shortcut = previous.open_menu_shortcut;
+    let next_shortcut = normalize_shortcut(&preferences.open_menu_shortcut)?;
 
     if previous_shortcut != next_shortcut {
-        replace_global_shortcut(&app, &previous_shortcut, &next_shortcut)?;
+        apply_shortcut(&app, &previous_shortcut, &next_shortcut)?;
     }
 
     let mut preferences = preferences;
-    preferences.open_menu_shortcut.value = next_shortcut.clone();
+    preferences.open_menu_shortcut = next_shortcut.clone();
     if let Err(error) = write_json(&preferences_path(&app)?, &preferences) {
         if previous_shortcut != next_shortcut {
-            let _ = replace_global_shortcut(&app, &next_shortcut, &previous_shortcut);
+            let _ = apply_shortcut(&app, &next_shortcut, &previous_shortcut);
         }
         return Err(error);
     }
 
     if previous_shortcut != next_shortcut {
-        app.emit(SHORTCUT_UPDATED_EVENT, next_shortcut)
-            .map_err(|error| {
-                config_error("O atalho foi salvo, mas a tela não foi atualizada", error)
-            })?;
+        if let Err(error) = app.emit(SHORTCUT_UPDATED_EVENT, next_shortcut.value) {
+            eprintln!("O atalho foi salvo, mas a tela não foi atualizada: {error}");
+        }
     }
     Ok(())
 }
@@ -386,36 +363,121 @@ fn replace_global_shortcut(
 
 pub fn register_initial_shortcut(app: &tauri::AppHandle) -> Result<(), String> {
     let mut response = load_preferences_internal(app)?;
-    let requested = response.preferences.open_menu_shortcut.value.clone();
-    let registered = match app.global_shortcut().register(requested.as_str()) {
-        Ok(()) => requested,
-        Err(error) => {
-            if requested == DEFAULT_SHORTCUT {
-                return Err(config_error(
-                    "Não foi possível registrar o atalho global",
-                    error,
-                ));
-            }
-            app.global_shortcut()
-                .register(DEFAULT_SHORTCUT)
-                .map_err(|fallback_error| {
-                    config_error(
-                        "Nem o atalho salvo nem Ctrl+Space puderam ser registrados",
-                        fallback_error,
-                    )
-                })?;
-            response.preferences.open_menu_shortcut.value = DEFAULT_SHORTCUT.into();
-            write_json(&preferences_path(app)?, &response.preferences)?;
-            eprintln!(
-                "O atalho salvo '{requested}' era inválido ou estava em uso; Ctrl+Space foi restaurado: {error}"
-            );
-            DEFAULT_SHORTCUT.into()
-        }
+    let requested = response.preferences.open_menu_shortcut.clone();
+    let empty_keyboard = OpenMenuShortcut {
+        shortcut_type: ShortcutType::Keyboard,
+        value: String::new(),
     };
 
+    if let Err(error) = apply_shortcut(app, &empty_keyboard, &requested) {
+        let fallback = OpenMenuShortcut {
+            shortcut_type: ShortcutType::Keyboard,
+            value: DEFAULT_SHORTCUT.into(),
+        };
+        apply_shortcut(app, &empty_keyboard, &fallback).map_err(|fallback_error| {
+            format!(
+                "O atalho salvo falhou ({error}) e Ctrl+Space também não pôde ser registrado: {fallback_error}"
+            )
+        })?;
+        response.preferences.open_menu_shortcut = fallback;
+        write_json(&preferences_path(app)?, &response.preferences)?;
+        eprintln!("O atalho salvo era inválido; Ctrl+Space foi restaurado: {error}");
+    }
+    Ok(())
+}
+
+fn normalize_shortcut(shortcut: &OpenMenuShortcut) -> Result<OpenMenuShortcut, String> {
+    match shortcut.shortcut_type {
+        ShortcutType::Keyboard => {
+            let value = shortcut.value.trim();
+            if value.is_empty() {
+                return Err("O atalho de teclado não pode ficar vazio.".into());
+            }
+            Ok(OpenMenuShortcut {
+                shortcut_type: ShortcutType::Keyboard,
+                value: value.into(),
+            })
+        }
+        ShortcutType::Mouse => {
+            let button = parse_mouse_button(&shortcut.value)?;
+            Ok(OpenMenuShortcut {
+                shortcut_type: ShortcutType::Mouse,
+                value: format!("Mouse{button}"),
+            })
+        }
+    }
+}
+
+fn parse_mouse_button(value: &str) -> Result<u8, String> {
+    match value.trim() {
+        "Mouse3" => Ok(3),
+        "Mouse4" => Ok(4),
+        "Mouse5" => Ok(5),
+        _ => Err("Escolha Mouse3, Mouse4 ou Mouse5.".into()),
+    }
+}
+
+fn apply_shortcut(
+    app: &tauri::AppHandle,
+    previous: &OpenMenuShortcut,
+    next: &OpenMenuShortcut,
+) -> Result<(), String> {
+    match (&previous.shortcut_type, &next.shortcut_type) {
+        (ShortcutType::Keyboard, ShortcutType::Keyboard) => {
+            if previous.value.is_empty() {
+                register_keyboard_shortcut(app, &next.value)
+            } else {
+                replace_global_shortcut(app, &previous.value, &next.value)
+            }
+        }
+        (ShortcutType::Keyboard, ShortcutType::Mouse) => {
+            app.state::<MouseShortcutManager>()
+                .set_button(parse_mouse_button(&next.value)?)?;
+            if let Err(error) = unregister_keyboard_shortcut(app, &previous.value) {
+                app.state::<MouseShortcutManager>().disable();
+                return Err(error);
+            }
+            Ok(())
+        }
+        (ShortcutType::Mouse, ShortcutType::Keyboard) => {
+            register_keyboard_shortcut(app, &next.value)?;
+            app.state::<MouseShortcutManager>().disable();
+            Ok(())
+        }
+        (ShortcutType::Mouse, ShortcutType::Mouse) => app
+            .state::<MouseShortcutManager>()
+            .set_button(parse_mouse_button(&next.value)?),
+    }
+}
+
+fn register_keyboard_shortcut(app: &tauri::AppHandle, shortcut: &str) -> Result<(), String> {
+    app.global_shortcut().register(shortcut).map_err(|error| {
+        format!("Não foi possível usar o atalho '{shortcut}'. Ele pode estar em uso: {error}")
+    })?;
     *app.state::<ShortcutRegistrationState>()
         .0
         .lock()
-        .map_err(|_| "Não foi possível atualizar o estado do atalho.".to_string())? = registered;
+        .map_err(|_| "Não foi possível atualizar o estado do atalho.".to_string())? =
+        shortcut.into();
+    Ok(())
+}
+
+fn unregister_keyboard_shortcut(app: &tauri::AppHandle, fallback: &str) -> Result<(), String> {
+    let state = app.state::<ShortcutRegistrationState>();
+    let mut registered = state
+        .0
+        .lock()
+        .map_err(|_| "Não foi possível acessar o estado do atalho.".to_string())?;
+    let active = if registered.is_empty() {
+        fallback
+    } else {
+        registered.as_str()
+    };
+    if !active.is_empty() {
+        app.global_shortcut()
+            .unregister(active)
+            .map_err(|error| config_error("Não foi possível liberar o atalho de teclado", error))?;
+    }
+    registered.clear();
     Ok(())
 }
