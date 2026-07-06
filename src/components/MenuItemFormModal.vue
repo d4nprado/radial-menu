@@ -17,7 +17,8 @@ const emit = defineEmits<{
   cancel: []
 }>()
 
-type ActionType = MenuAction['type']
+type ActionType = Exclude<MenuAction['type'], 'group'>
+type ItemKind = 'action' | 'group'
 
 type FormState = {
   id: string
@@ -25,6 +26,7 @@ type FormState = {
   hint: string
   icon: string
   accent: string
+  itemKind: ItemKind
   actionType: ActionType
   value: string
   systemTarget: SystemActionTarget
@@ -36,16 +38,16 @@ const form = reactive<FormState>({
   hint: '',
   icon: '',
   accent: '#8b7cff',
+  itemKind: 'action',
   actionType: 'program',
   value: '',
   systemTarget: 'explorer',
 })
 
 const isEditing = computed(() => Boolean(props.item))
-const editingGroup = computed(() => props.item?.action.type === 'group')
-const isGroup = computed(() => form.actionType === 'group')
+const isGroup = computed(() => form.itemKind === 'group')
 const requiresValue = computed(() =>
-  form.actionType !== 'system' && form.actionType !== 'group',
+  !isGroup.value && form.actionType !== 'system',
 )
 const canSave = computed(() =>
   form.label.trim()
@@ -62,7 +64,10 @@ watch(
     form.hint = item?.hint ?? ''
     form.icon = item?.icon ?? ''
     form.accent = item?.accent ?? '#8b7cff'
-    form.actionType = item?.action.type ?? 'program'
+    form.itemKind = item?.action.type === 'group' ? 'group' : 'action'
+    form.actionType = item && item.action.type !== 'group'
+      ? item.action.type
+      : 'program'
     form.systemTarget = item?.action.type === 'system' ? item.action.target : 'explorer'
     form.value = getActionValue(item?.action)
   },
@@ -89,6 +94,12 @@ async function selectDirectory() {
 }
 
 function buildAction(): MenuAction {
+  if (isGroup.value) {
+    const items = props.item?.action.type === 'group'
+      ? structuredClone(toRaw(props.item.action.items))
+      : []
+    return { type: 'group', items }
+  }
   if (form.actionType === 'program') return { type: 'program', path: form.value.trim() }
   if (form.actionType === 'directory') return { type: 'directory', path: form.value.trim() }
   if (form.actionType === 'url') {
@@ -98,13 +109,12 @@ function buildAction(): MenuAction {
       : `https://${value}`
     return { type: 'url', url }
   }
-  if (form.actionType === 'group') {
-    const items = props.item?.action.type === 'group'
-      ? structuredClone(toRaw(props.item.action.items))
-      : []
-    return { type: 'group', items }
-  }
   return { type: 'system', target: form.systemTarget }
+}
+
+function selectItemKind(kind: ItemKind) {
+  if (!props.allowGroups || isEditing.value) return
+  form.itemKind = kind
 }
 
 function submit() {
@@ -158,18 +168,46 @@ function submit() {
           </span>
         </label>
 
-        <label class="item-modal__wide">
+        <div v-if="allowGroups" class="item-modal__wide item-kind-field">
+          <span>Categoria do item</span>
+          <div class="item-kind-toggle" role="group" aria-label="Categoria do item">
+            <button
+              type="button"
+              :class="{ 'is-active': !isGroup }"
+              :aria-pressed="!isGroup"
+              :disabled="isEditing"
+              @click="selectItemKind('action')"
+            >
+              <strong>Ação</strong>
+              <small>Executa um comando</small>
+            </button>
+            <button
+              type="button"
+              :class="{ 'is-active': isGroup }"
+              :aria-pressed="isGroup"
+              :disabled="isEditing"
+              @click="selectItemKind('group')"
+            >
+              <strong>Grupo</strong>
+              <small>Organiza outras ações</small>
+            </button>
+          </div>
+          <small v-if="isEditing" class="item-kind-field__hint">
+            A categoria não pode ser alterada durante a edição.
+          </small>
+        </div>
+
+        <label v-if="!isGroup" class="item-modal__wide">
           <span>Tipo de ação</span>
-          <select v-model="form.actionType" :disabled="editingGroup">
+          <select v-model="form.actionType">
             <option value="program">Abrir programa</option>
             <option value="directory">Abrir diretório</option>
             <option value="url">Abrir URL</option>
             <option value="system">Ação padrão do sistema</option>
-            <option v-if="allowGroups || isGroup" value="group">Grupo</option>
           </select>
         </label>
 
-        <label v-if="form.actionType === 'system'" class="item-modal__wide">
+        <label v-if="!isGroup && form.actionType === 'system'" class="item-modal__wide">
           <span>Ação padrão</span>
           <select v-model="form.systemTarget">
             <option value="explorer">Explorador de arquivos</option>
@@ -179,7 +217,7 @@ function submit() {
           </select>
         </label>
 
-        <div v-else-if="form.actionType === 'group'" class="item-modal__wide group-note">
+        <div v-else-if="isGroup" class="item-modal__wide group-note">
           Os itens poderão ser adicionados depois, ao abrir o grupo na configuração.
         </div>
 
@@ -304,6 +342,78 @@ label > span:first-child {
 
 .item-modal__wide {
   grid-column: 1 / -1;
+}
+
+.item-kind-field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.item-kind-field > span {
+  color: #a5a9ba;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.item-kind-toggle {
+  display: grid;
+  padding: 4px;
+  border: 1px solid rgb(255 255 255 / 8%);
+  border-radius: 11px;
+  background: #0e111d;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+}
+
+.item-kind-toggle button {
+  display: flex;
+  min-height: 48px;
+  padding: 8px 12px;
+  align-items: flex-start;
+  justify-content: center;
+  flex-direction: column;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: #858a9e;
+  text-align: left;
+  background: transparent;
+  cursor: pointer;
+  gap: 3px;
+}
+
+.item-kind-toggle button:hover:not(:disabled) {
+  color: #cbc7ec;
+  background: rgb(139 124 255 / 6%);
+}
+
+.item-kind-toggle button.is-active {
+  border-color: rgb(139 124 255 / 45%);
+  color: #e7e5fa;
+  background: linear-gradient(135deg, rgb(121 107 234 / 20%), rgb(95 81 208 / 10%));
+  box-shadow: 0 4px 14px rgb(38 31 91 / 18%);
+}
+
+.item-kind-toggle strong {
+  font-size: 11px;
+}
+
+.item-kind-toggle small {
+  color: #6f7488;
+  font-size: 8px;
+}
+
+.item-kind-toggle button.is-active small {
+  color: #9791c8;
+}
+
+.item-kind-toggle button:disabled {
+  cursor: default;
+}
+
+.item-kind-field__hint {
+  color: #696e82;
+  font-size: 8px;
 }
 
 .group-note {
