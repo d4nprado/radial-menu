@@ -7,9 +7,8 @@ use tauri::{
     tray::TrayIconBuilder,
     Manager, WindowEvent,
 };
-use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
+use tauri_plugin_global_shortcut::ShortcutState;
 
-const GLOBAL_SHORTCUT: &str = "Ctrl+Space";
 const MAIN_WINDOW_LABEL: &str = "main";
 const SETTINGS_WINDOW_LABEL: &str = "settings";
 const CONFIGURE_MENU_ID: &str = "configure";
@@ -33,6 +32,7 @@ fn show_settings(app: &tauri::AppHandle) -> Result<(), String> {
 pub fn run() {
     tauri::Builder::default()
         .manage(system_stats::SystemStatsState::new())
+        .manage(config::ShortcutRegistrationState::new())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
@@ -61,9 +61,7 @@ pub fn run() {
                 .build(),
         )
         .setup(|app| {
-            app.global_shortcut().register(GLOBAL_SHORTCUT)?;
-            let preferences =
-                config::load_preferences_internal(app.handle()).map_err(std::io::Error::other)?;
+            config::register_initial_shortcut(app.handle()).map_err(std::io::Error::other)?;
 
             let configure_item = MenuItem::with_id(
                 app,
@@ -102,10 +100,6 @@ pub fn run() {
             }
 
             tray.build(app)?;
-
-            if preferences.preferences.open_config_on_startup {
-                show_settings(app.handle()).map_err(std::io::Error::other)?;
-            }
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -128,7 +122,6 @@ pub fn run() {
             commands::open_directory,
             config::load_launcher_config,
             config::save_launcher_config,
-            config::reset_launcher_config,
             config::get_config_path,
             config::open_config_directory,
             config::get_app_preferences,

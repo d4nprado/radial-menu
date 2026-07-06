@@ -1,20 +1,17 @@
 <script setup lang="ts">
 import { invoke } from '@tauri-apps/api/core'
 import { onMounted, ref } from 'vue'
-import menuConfigJson from '../config/menu.json'
-import type { ConfigLoadResponse, MenuConfig, MenuItem } from '../types/menu'
+import type { ConfigLoadResponse, MenuItem } from '../types/menu'
 import AppPreferencesModal from './AppPreferencesModal.vue'
 import MenuItemFormModal from './MenuItemFormModal.vue'
 import MenuItemsPanel from './MenuItemsPanel.vue'
 import RadialMenuPreview from './RadialMenuPreview.vue'
 
-const defaultConfig = menuConfigJson as MenuConfig
-
 function cloneItems(items: MenuItem[]) {
   return structuredClone(items)
 }
 
-const shortcut = ref(defaultConfig.shortcut)
+const shortcut = ref('Ctrl+Space')
 const items = ref<MenuItem[]>([])
 const selectedId = ref<string | null>(null)
 const formMode = ref<'add' | 'edit' | null>(null)
@@ -38,7 +35,7 @@ async function loadConfig() {
     selectedId.value = items.value[0]?.id ?? null
     setStatus(response.warning ?? 'Configuração carregada', response.warning ? 'error' : 'neutral')
   } catch (cause) {
-    items.value = cloneItems(defaultConfig.items)
+    items.value = []
     setStatus(
       typeof cause === 'string' ? cause : 'Não foi possível carregar. Usando o padrão.',
       'error',
@@ -124,26 +121,6 @@ async function saveConfig() {
   }
 }
 
-async function restoreDefaults() {
-  if (!window.confirm('Restaurar todos os itens para a configuração padrão?')) return
-
-  busy.value = true
-  try {
-    const config = await invoke<MenuConfig>('reset_launcher_config')
-    shortcut.value = config.shortcut
-    items.value = cloneItems(config.items)
-    selectedId.value = items.value[0]?.id ?? null
-    setStatus('Configuração padrão restaurada', 'success')
-  } catch (cause) {
-    setStatus(
-      typeof cause === 'string' ? cause : 'Não foi possível restaurar o padrão.',
-      'error',
-    )
-  } finally {
-    busy.value = false
-  }
-}
-
 onMounted(loadConfig)
 </script>
 
@@ -190,9 +167,6 @@ onMounted(loadConfig)
         {{ status }}
       </span>
       <div>
-        <button type="button" class="button-restore" :disabled="busy" @click="restoreDefaults">
-          Restaurar padrão
-        </button>
         <button type="button" class="button-primary" :disabled="busy" @click="saveConfig">
           Salvar
         </button>
@@ -333,12 +307,6 @@ h1 {
   padding: 10px 17px;
   border-radius: 10px;
   cursor: pointer;
-}
-
-.button-restore {
-  border: 1px solid rgb(255 255 255 / 10%);
-  color: #b9bdcb;
-  background: rgb(255 255 255 / 4%);
 }
 
 .button-primary {

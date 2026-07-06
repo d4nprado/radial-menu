@@ -1,7 +1,7 @@
 # Orbit Launcher
 
-Menu radial desktop construído com Tauri v2, Vue 3 e TypeScript. Pressione
-`Ctrl+Space` para abrir o launcher na posição atual do cursor.
+Menu radial desktop construído com Tauri v2, Vue 3 e TypeScript. Por padrão,
+pressione `Ctrl+Space` para abrir o launcher na posição atual do cursor.
 
 ## Desenvolvimento
 
@@ -33,13 +33,10 @@ npm run tauri build
 
 ## Configuração
 
-Os seis itens ficam em `src/config/menu.json`. Cada item aceita uma ação
-`program` ou `directory`, sempre com um caminho absoluto. O campo `accent`
-controla a cor do item e `icon` aceita uma letra ou símbolo curto.
-
-O atalho efetivamente registrado fica na constante `GLOBAL_SHORTCUT`, em
-`src-tauri/src/lib.rs`. Atualize também `shortcut` no JSON para manter o texto
-mostrado no centro do menu sincronizado.
+Os itens são configurados pela janela do launcher e persistidos em
+`launcher-config.json`, no diretório de dados do aplicativo. Uma instalação
+nova começa com o menu vazio. O atalho global pode ser alterado nas
+preferências e é salvo separadamente em `app-preferences.json`.
 
 ## Organização
 

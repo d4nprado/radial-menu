@@ -34,6 +34,10 @@ defineEmits<{
         @select="$emit('select', $event)"
       />
 
+      <p v-if="items.length === 0" class="radial-menu__empty">
+        Nenhuma ação configurada
+      </p>
+
       <button class="radial-center" aria-label="Fechar menu" @click.stop="$emit('dismiss')">
         <SystemStatus :stats="stats" :shortcut="shortcut" />
       </button>
