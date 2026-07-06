@@ -21,6 +21,7 @@ const actionLabels: Record<Exclude<MenuAction['type'], 'group'>, string> = {
   directory: 'Diretório',
   url: 'URL',
   system: 'Sistema',
+  stream: 'Stream',
 }
 
 const systemLabels: Record<SystemActionTarget, string> = {
@@ -41,6 +42,7 @@ function itemSubtitle(item: MenuItem) {
     return `${actionLabels[action.type]} · ${action.path}`
   }
   if (action.type === 'url') return `${actionLabels.url} · ${action.url}`
+  if (action.type === 'stream') return `${actionLabels.stream} · ${action.sceneName}`
   return `${actionLabels.system} · ${systemLabels[action.target]}`
 }
 </script>

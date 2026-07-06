@@ -7,6 +7,7 @@ export type FixedIconKind =
   | 'terminal'
   | 'calculator'
   | 'notepad'
+  | 'broadcast'
   | 'group'
 
 export type ProgramIconPayload = {
@@ -29,6 +30,7 @@ export function fixedIconForItem(item: MenuItem): FixedIconKind | null {
   if (item.action.type === 'directory') return 'folder'
   if (item.action.type === 'url') return 'globe'
   if (item.action.type === 'system') return systemIcons[item.action.target]
+  if (item.action.type === 'stream') return 'broadcast'
   if (item.action.type === 'group') return 'group'
   return null
 }

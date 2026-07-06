@@ -86,6 +86,11 @@ watch(programIcon, async (icon) => {
       <path d="M6 3.5h12a2 2 0 0 1 2 2v15H4v-15a2 2 0 0 1 2-2z" />
       <path d="M8 2v4M12 2v4M16 2v4M8 10h8M8 14h8M8 18h5" />
     </template>
+    <template v-else-if="fixedIcon === 'broadcast'">
+      <circle cx="12" cy="12" r="2.4" />
+      <path d="M8.5 8.5a5 5 0 0 0 0 7M15.5 8.5a5 5 0 0 1 0 7" />
+      <path d="M5.5 5.5a9.2 9.2 0 0 0 0 13M18.5 5.5a9.2 9.2 0 0 1 0 13" />
+    </template>
     <template v-else>
       <rect x="3" y="3" width="7" height="7" rx="1.5" />
       <rect x="14" y="3" width="7" height="7" rx="1.5" />

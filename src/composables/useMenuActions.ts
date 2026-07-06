@@ -17,6 +17,8 @@ const executors: {
     invoke('open_url', { url: action.url }),
   system: (action) =>
     invoke('execute_system_action', { target: action.target }),
+  stream: (action) =>
+    invoke('execute_stream_action', { action }),
   group: () =>
     Promise.reject('Grupos devem ser abertos pelo menu, não executados como ações.'),
 }

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, reactive, toRaw, watch } from 'vue'
+import { computed, reactive, ref, toRaw, watch } from 'vue'
+import { invoke } from '@tauri-apps/api/core'
 import { open } from '@tauri-apps/plugin-dialog'
 import type {
   MenuAction,
@@ -43,6 +44,9 @@ const form = reactive<FormState>({
   value: '',
   systemTarget: 'explorer',
 })
+const obsScenes = ref<string[]>([])
+const streamStatus = ref('')
+const isLoadingScenes = ref(false)
 
 const isEditing = computed(() => Boolean(props.item))
 const isGroup = computed(() => form.itemKind === 'group')
@@ -54,6 +58,11 @@ const canSave = computed(() =>
   && form.hint.trim()
   && form.icon.trim()
   && (!requiresValue.value || form.value.trim()),
+)
+const savedStreamSceneMissing = computed(() =>
+  form.actionType === 'stream'
+  && Boolean(form.value.trim())
+  && !obsScenes.value.includes(form.value),
 )
 
 watch(
@@ -76,6 +85,7 @@ watch(
 
 function getActionValue(action?: MenuAction) {
   if (!action || action.type === 'system' || action.type === 'group') return ''
+  if (action.type === 'stream') return action.sceneName
   return action.type === 'url' ? action.url : action.path
 }
 
@@ -93,6 +103,26 @@ async function selectDirectory() {
   if (typeof selected === 'string') form.value = selected
 }
 
+async function loadObsScenes() {
+  isLoadingScenes.value = true
+  streamStatus.value = ''
+  try {
+    obsScenes.value = await invoke<string[]>('list_obs_scenes')
+    if (!obsScenes.value.length) {
+      streamStatus.value = 'Nenhuma cena retornada pelo OBS.'
+      return
+    }
+    if (!form.value.trim()) form.value = obsScenes.value[0] ?? ''
+    streamStatus.value = 'Cenas carregadas do OBS.'
+  } catch (cause) {
+    streamStatus.value = typeof cause === 'string'
+      ? cause
+      : 'Não foi possível carregar as cenas do OBS.'
+  } finally {
+    isLoadingScenes.value = false
+  }
+}
+
 function buildAction(): MenuAction {
   if (isGroup.value) {
     const items = props.item?.action.type === 'group'
@@ -108,6 +138,14 @@ function buildAction(): MenuAction {
       ? value
       : `https://${value}`
     return { type: 'url', url }
+  }
+  if (form.actionType === 'stream') {
+    return {
+      type: 'stream',
+      provider: 'obs',
+      operation: 'set_scene',
+      sceneName: form.value.trim(),
+    }
   }
   return { type: 'system', target: form.systemTarget }
 }
@@ -204,6 +242,7 @@ function submit() {
             <option value="directory">Abrir diretório</option>
             <option value="url">Abrir URL</option>
             <option value="system">Ação padrão do sistema</option>
+            <option value="stream">Stream</option>
           </select>
         </label>
 
@@ -216,6 +255,53 @@ function submit() {
             <option value="notepad">Bloco de notas</option>
           </select>
         </label>
+
+        <div v-else-if="!isGroup && form.actionType === 'stream'" class="item-modal__wide stream-fields">
+          <label>
+            <span>Plataforma</span>
+            <select disabled>
+              <option>OBS Studio</option>
+            </select>
+          </label>
+
+          <label>
+            <span>Comando</span>
+            <select disabled>
+              <option>Trocar cena</option>
+            </select>
+          </label>
+
+          <label class="stream-fields__wide">
+            <span>Cena do OBS</span>
+            <span class="path-field">
+              <select v-model="form.value" required>
+                <option value="" disabled>Selecione uma cena</option>
+                <option
+                  v-if="savedStreamSceneMissing"
+                  :value="form.value"
+                >
+                  Cena atual: {{ form.value }}
+                </option>
+                <option
+                  v-for="scene in obsScenes"
+                  :key="scene"
+                  :value="scene"
+                >
+                  {{ scene }}
+                </option>
+              </select>
+              <button
+                type="button"
+                :disabled="isLoadingScenes"
+                @click="loadObsScenes"
+              >
+                {{ isLoadingScenes ? 'Carregando...' : 'Carregar cenas' }}
+              </button>
+            </span>
+          </label>
+
+          <p v-if="streamStatus" class="stream-fields__status">{{ streamStatus }}</p>
+        </div>
 
         <div v-else-if="isGroup" class="item-modal__wide group-note">
           Os itens poderão ser adicionados depois, ao abrir o grupo na configuração.
@@ -422,6 +508,24 @@ label > span:first-child {
   border-radius: 9px;
   color: #8f94aa;
   background: rgb(139 124 255 / 6%);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.stream-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.stream-fields__wide,
+.stream-fields__status {
+  grid-column: 1 / -1;
+}
+
+.stream-fields__status {
+  margin: 0;
+  color: #8f94aa;
   font-size: 10px;
   line-height: 1.5;
 }

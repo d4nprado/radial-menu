@@ -25,6 +25,13 @@ export type SystemAction = {
   target: SystemActionTarget
 }
 
+export type StreamAction = {
+  type: 'stream'
+  provider: 'obs'
+  operation: 'set_scene'
+  sceneName: string
+}
+
 export type GroupAction = {
   type: 'group'
   items: MenuItem[]
@@ -35,6 +42,7 @@ export type MenuAction =
   | DirectoryAction
   | UrlAction
   | SystemAction
+  | StreamAction
   | GroupAction
 
 export type MenuItem = {
@@ -71,4 +79,22 @@ export type AppPreferences = {
 export type PreferencesLoadResponse = {
   preferences: AppPreferences
   warning: string | null
+}
+
+export type StreamPreferences = {
+  obs: {
+    host: string
+    port: number
+    password: string
+  }
+}
+
+export type StreamPreferencesLoadResponse = {
+  preferences: StreamPreferences
+  warning: string | null
+}
+
+export type ObsConnectionStatus = {
+  ok: boolean
+  message: string
 }

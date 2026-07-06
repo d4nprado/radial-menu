@@ -2,7 +2,13 @@
 import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import type { AppPreferences, PreferencesLoadResponse } from '../types/menu'
+import type {
+  AppPreferences,
+  ObsConnectionStatus,
+  PreferencesLoadResponse,
+  StreamPreferences,
+  StreamPreferencesLoadResponse,
+} from '../types/menu'
 
 const DEFAULT_SHORTCUT = 'Ctrl+Space'
 const emit = defineEmits<{ close: [] }>()
@@ -14,7 +20,18 @@ function defaultPreferences(): AppPreferences {
   }
 }
 
+function defaultStreamPreferences(): StreamPreferences {
+  return {
+    obs: {
+      host: '127.0.0.1',
+      port: 4455,
+      password: '',
+    },
+  }
+}
+
 const preferences = ref<AppPreferences>(defaultPreferences())
+const streamPreferences = ref<StreamPreferences>(defaultStreamPreferences())
 const shortcutType = ref<'keyboard' | 'mouse'>('keyboard')
 const keyboardShortcut = ref(DEFAULT_SHORTCUT)
 const mouseShortcut = ref('Mouse4')
@@ -23,6 +40,8 @@ const configPath = ref('Carregando caminho...')
 const busy = ref(true)
 const message = ref('')
 const isError = ref(false)
+const obsStatus = ref('Não testado')
+const obsStatusOk = ref(false)
 const unlisteners: UnlistenFn[] = []
 
 const draftValue = computed(() =>
@@ -68,6 +87,7 @@ async function load() {
 
   void loadConfigPath()
   void refreshAutostart()
+  void loadStreamPreferences()
 }
 
 async function loadConfigPath() {
@@ -84,6 +104,64 @@ async function refreshAutostart() {
       await invoke<boolean>('get_autostart_enabled')
   } catch {
     // O estado persistido continua disponível mesmo se o plugin falhar em dev.
+  }
+}
+
+async function loadStreamPreferences() {
+  try {
+    const response = await invoke<StreamPreferencesLoadResponse>('get_stream_preferences')
+    streamPreferences.value = response.preferences
+    if (response.warning) showMessage(response.warning, true)
+  } catch (cause) {
+    showMessage(
+      typeof cause === 'string'
+        ? cause
+        : 'Não foi possível carregar as preferências Stream.',
+      true,
+    )
+  }
+}
+
+async function saveStreamPreferences() {
+  busy.value = true
+  obsStatusOk.value = false
+  obsStatus.value = 'Não testado'
+  try {
+    await invoke('save_stream_preferences', {
+      preferences: streamPreferences.value,
+    })
+    showMessage('Preferências Stream salvas.')
+  } catch (cause) {
+    showMessage(
+      typeof cause === 'string'
+        ? cause
+        : 'Não foi possível salvar as preferências Stream.',
+      true,
+    )
+  } finally {
+    busy.value = false
+  }
+}
+
+async function testObsConnection() {
+  busy.value = true
+  obsStatusOk.value = false
+  obsStatus.value = 'Testando...'
+  try {
+    await invoke('save_stream_preferences', {
+      preferences: streamPreferences.value,
+    })
+    const status = await invoke<ObsConnectionStatus>('test_obs_connection')
+    obsStatusOk.value = status.ok
+    obsStatus.value = status.message
+    showMessage(status.message, !status.ok)
+  } catch (cause) {
+    obsStatus.value = typeof cause === 'string'
+      ? cause
+      : 'Não foi possível conectar ao OBS Studio.'
+    showMessage(obsStatus.value, true)
+  } finally {
+    busy.value = false
   }
 }
 
@@ -226,7 +304,13 @@ async function restoreDefaults() {
   try {
     await cancelCapture()
     await invoke('save_app_preferences', { preferences: defaults })
+    await invoke('save_stream_preferences', {
+      preferences: defaultStreamPreferences(),
+    })
     preferences.value = defaults
+    streamPreferences.value = defaultStreamPreferences()
+    obsStatus.value = 'Não testado'
+    obsStatusOk.value = false
     shortcutType.value = 'keyboard'
     keyboardShortcut.value = DEFAULT_SHORTCUT
     mouseShortcut.value = 'Mouse4'
@@ -353,6 +437,62 @@ onBeforeUnmount(() => {
           <p>Use uma combinação de teclado ou Mouse 3/4/5.</p>
         </section>
 
+        <section class="stream-section">
+          <div class="section-heading">
+            <span>STREAM</span>
+          </div>
+
+          <div class="stream-provider">
+            <h3>OBS Studio</h3>
+            <div class="stream-grid">
+              <label>
+                <span>Host</span>
+                <input
+                  v-model.trim="streamPreferences.obs.host"
+                  :disabled="busy"
+                  type="text"
+                  placeholder="127.0.0.1"
+                >
+              </label>
+
+              <label>
+                <span>Porta</span>
+                <input
+                  v-model.number="streamPreferences.obs.port"
+                  :disabled="busy"
+                  type="number"
+                  min="1"
+                  max="65535"
+                  step="1"
+                >
+              </label>
+
+              <label class="stream-grid__wide">
+                <span>Senha</span>
+                <input
+                  v-model="streamPreferences.obs.password"
+                  :disabled="busy"
+                  type="password"
+                  autocomplete="off"
+                  placeholder="Opcional"
+                >
+              </label>
+            </div>
+
+            <div class="stream-actions">
+              <button type="button" :disabled="busy" @click="saveStreamPreferences">
+                Salvar Stream
+              </button>
+              <button type="button" :disabled="busy" @click="testObsConnection">
+                Testar conexão
+              </button>
+              <span class="obs-status" :class="{ ok: obsStatusOk }">
+                {{ obsStatus }}
+              </span>
+            </div>
+          </div>
+        </section>
+
         <div class="path">
           <span>Arquivo de configuração</span>
           <code :title="configPath">{{ configPath }}</code>
@@ -373,7 +513,7 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.backdrop{position:fixed;z-index:40;inset:0;display:grid;padding:30px;place-items:center;background:#03050bb8;backdrop-filter:blur(8px)}.modal{width:min(100%,590px);max-height:100%;padding:27px;overflow-y:auto;border:1px solid #ffffff1c;border-radius:21px;background:#151827;box-shadow:0 30px 90px #0008}header,footer,.option,.section-heading{display:flex;align-items:center}header{justify-content:space-between}header small{color:#8d82ff;font-size:10px;font-weight:700;letter-spacing:.14em}h2{margin:5px 0 0;font-size:21px}header button{width:32px;height:32px;border:0;border-radius:9px;color:#9297aa;background:#ffffff0d;font-size:20px;cursor:pointer}.options{margin-top:23px}.options.disabled{opacity:.72}.option{padding:16px 0;justify-content:space-between;border-bottom:1px solid #ffffff12;gap:20px}.option span{display:flex;flex-direction:column;gap:5px}.option strong{font-size:12px}.option small{color:#7f8498;font-size:10px}.option input{position:relative;width:38px;height:21px;flex:none;appearance:none;border-radius:999px;background:#34384a;cursor:pointer;transition:.15s}.option input::after{position:absolute;top:3px;left:3px;width:15px;height:15px;border-radius:50%;background:#a6aabc;content:"";transition:.15s}.option input:checked{background:#6d5edf}.option input:checked::after{left:20px;background:#fff}.shortcut-section{padding:19px 0;border-bottom:1px solid #ffffff12}.section-heading{margin-bottom:10px;justify-content:space-between}.section-heading span,.path>span{color:#a5a9ba;font-size:10px;font-weight:700;letter-spacing:.08em}.section-heading b{padding:4px 7px;border-radius:6px;color:#aaa4ee;background:#8b7cff14;font-size:9px}.shortcut-capture{display:flex;width:100%;min-height:60px;padding:10px 13px;align-items:center;justify-content:space-between;border:1px solid #ffffff1a;border-radius:10px;color:#eee;background:#0e111d;cursor:pointer;gap:12px}.shortcut-capture.capturing{border-color:#8b7cff99;box-shadow:0 0 0 3px #8b7cff1c}.shortcut-capture small{color:#777c91;font-size:9px}.shortcut-capture kbd{padding:7px 9px;border:1px solid #ffffff1a;border-radius:7px;color:#d3cfff;background:#ffffff0a;font-family:inherit;font-size:11px}.save-shortcut{margin-top:9px;padding:8px 11px;border:1px solid #8b7cff3d;border-radius:8px;color:#bcb6ff;background:#8b7cff14;cursor:pointer}.shortcut-section p{margin:11px 0 0;color:#676c80;font-size:9px}.path{display:flex;padding:18px 0 5px;flex-direction:column;gap:8px}.path code{overflow:hidden;padding:11px 12px;border:1px solid #ffffff14;border-radius:9px;color:#9297aa;background:#0e111d;font-family:Consolas,monospace;font-size:9px;text-overflow:ellipsis;white-space:nowrap}.path button{align-self:flex-start;padding:8px 11px;border:1px solid #8b7cff3d;border-radius:8px;color:#bcb6ff;background:#8b7cff14;cursor:pointer}.message{margin:15px 0 0;padding:9px 11px;border-radius:8px;color:#79dac8;background:#55d6be12;font-size:10px}.message.error{color:#ff9bae;background:#ff647e12}footer{margin-top:22px;padding-top:17px;justify-content:flex-end;border-top:1px solid #ffffff12;gap:9px}footer button{padding:9px 14px;border:1px solid #ffffff1a;border-radius:9px;color:#bfc2d0;background:transparent;cursor:pointer}.primary{border-color:#7567e8;color:#fff;background:#6759d7}button:disabled,input:disabled{cursor:not-allowed;opacity:.5}
+.backdrop{position:fixed;z-index:40;inset:0;display:grid;padding:30px;place-items:center;background:#03050bb8;backdrop-filter:blur(8px)}.modal{width:min(100%,590px);max-height:100%;padding:27px;overflow-y:auto;border:1px solid #ffffff1c;border-radius:21px;background:#151827;box-shadow:0 30px 90px #0008}header,footer,.option,.section-heading{display:flex;align-items:center}header{justify-content:space-between}header small{color:#8d82ff;font-size:10px;font-weight:700;letter-spacing:.14em}h2{margin:5px 0 0;font-size:21px}header button{width:32px;height:32px;border:0;border-radius:9px;color:#9297aa;background:#ffffff0d;font-size:20px;cursor:pointer}.options{margin-top:23px}.options.disabled{opacity:.72}.option{padding:16px 0;justify-content:space-between;border-bottom:1px solid #ffffff12;gap:20px}.option span{display:flex;flex-direction:column;gap:5px}.option strong{font-size:12px}.option small{color:#7f8498;font-size:10px}.option input{position:relative;width:38px;height:21px;flex:none;appearance:none;border-radius:999px;background:#34384a;cursor:pointer;transition:.15s}.option input::after{position:absolute;top:3px;left:3px;width:15px;height:15px;border-radius:50%;background:#a6aabc;content:"";transition:.15s}.option input:checked{background:#6d5edf}.option input:checked::after{left:20px;background:#fff}.shortcut-section,.stream-section{padding:19px 0;border-bottom:1px solid #ffffff12}.section-heading{margin-bottom:10px;justify-content:space-between}.section-heading span,.path>span{color:#a5a9ba;font-size:10px;font-weight:700;letter-spacing:.08em}.section-heading b{padding:4px 7px;border-radius:6px;color:#aaa4ee;background:#8b7cff14;font-size:9px}.shortcut-capture{display:flex;width:100%;min-height:60px;padding:10px 13px;align-items:center;justify-content:space-between;border:1px solid #ffffff1a;border-radius:10px;color:#eee;background:#0e111d;cursor:pointer;gap:12px}.shortcut-capture.capturing{border-color:#8b7cff99;box-shadow:0 0 0 3px #8b7cff1c}.shortcut-capture small{color:#777c91;font-size:9px}.shortcut-capture kbd{padding:7px 9px;border:1px solid #ffffff1a;border-radius:7px;color:#d3cfff;background:#ffffff0a;font-family:inherit;font-size:11px}.save-shortcut{margin-top:9px;padding:8px 11px;border:1px solid #8b7cff3d;border-radius:8px;color:#bcb6ff;background:#8b7cff14;cursor:pointer}.shortcut-section p{margin:11px 0 0;color:#676c80;font-size:9px}.stream-provider h3{margin:0 0 11px;font-size:12px}.stream-grid{display:grid;grid-template-columns:1fr 120px;gap:10px}.stream-grid label{display:flex;min-width:0;flex-direction:column;gap:6px}.stream-grid label span{color:#8e93a7;font-size:9px;font-weight:700}.stream-grid input{width:100%;height:37px;padding:0 10px;border:1px solid #ffffff14;border-radius:8px;color:#f0f1f8;background:#0e111d}.stream-grid__wide{grid-column:1/-1}.stream-actions{display:flex;margin-top:11px;align-items:center;flex-wrap:wrap;gap:8px}.stream-actions button{padding:8px 11px;border:1px solid #8b7cff3d;border-radius:8px;color:#bcb6ff;background:#8b7cff14;cursor:pointer}.obs-status{color:#ff9bae;font-size:9px}.obs-status.ok{color:#79dac8}.path{display:flex;padding:18px 0 5px;flex-direction:column;gap:8px}.path code{overflow:hidden;padding:11px 12px;border:1px solid #ffffff14;border-radius:9px;color:#9297aa;background:#0e111d;font-family:Consolas,monospace;font-size:9px;text-overflow:ellipsis;white-space:nowrap}.path button{align-self:flex-start;padding:8px 11px;border:1px solid #8b7cff3d;border-radius:8px;color:#bcb6ff;background:#8b7cff14;cursor:pointer}.message{margin:15px 0 0;padding:9px 11px;border-radius:8px;color:#79dac8;background:#55d6be12;font-size:10px}.message.error{color:#ff9bae;background:#ff647e12}footer{margin-top:22px;padding-top:17px;justify-content:flex-end;border-top:1px solid #ffffff12;gap:9px}footer button{padding:9px 14px;border:1px solid #ffffff1a;border-radius:9px;color:#bfc2d0;background:transparent;cursor:pointer}.primary{border-color:#7567e8;color:#fff;background:#6759d7}button:disabled,input:disabled{cursor:not-allowed;opacity:.5}
 
 .modal {
   max-height: calc(100vh - 60px);
