@@ -269,6 +269,20 @@ button {
   transition: border-color 150ms ease, transform 150ms ease;
 }
 
+.radial-menu__empty {
+  position: absolute;
+  z-index: 3;
+  top: calc(50% + 94px);
+  left: 50%;
+  margin: 0;
+  color: rgba(255, 255, 255, 0.32);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
 .radial-center:hover,
 .radial-center:focus-visible {
   border-color: rgba(139, 124, 255, 0.72);

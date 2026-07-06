@@ -58,14 +58,14 @@ function itemPosition(index: number) {
 
       <div class="preview-center">
         <strong>ORBIT</strong>
-        <span>{{ selectedItem?.label ?? 'Selecione uma ação' }}</span>
+        <span>{{ selectedItem?.label ?? (items.length ? 'Selecione uma ação' : 'Nenhuma ação configurada') }}</span>
       </div>
     </div>
 
     <div class="preview-card__selection">
       <div>
         <span class="preview-card__dot" :style="{ background: selectedItem?.accent }" />
-        <strong>{{ selectedItem?.label ?? 'Nenhum item selecionado' }}</strong>
+        <strong>{{ selectedItem?.label ?? (items.length ? 'Nenhum item selecionado' : 'Menu vazio') }}</strong>
         <small v-if="selectedItem">{{ selectedItem.hint }}</small>
       </div>
       <button type="button" class="preview-card__add" @click="$emit('add')">

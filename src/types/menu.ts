@@ -53,7 +53,14 @@ export type ConfigLoadResponse = {
 
 export type AppPreferences = {
   startWithWindows: boolean
-  openConfigOnStartup: boolean
+  openMenuShortcut: {
+    type: 'keyboard'
+    value: string
+  }
+  futureMouseShortcut: {
+    enabled: boolean
+    button: string | null
+  }
 }
 
 export type PreferencesLoadResponse = {
