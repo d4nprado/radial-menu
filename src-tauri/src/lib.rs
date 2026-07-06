@@ -130,6 +130,8 @@ pub fn run() {
             commands::hide_settings,
             commands::open_program,
             commands::open_directory,
+            commands::open_url,
+            commands::execute_system_action,
             config::load_launcher_config,
             config::save_launcher_config,
             config::get_config_path,
