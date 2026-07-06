@@ -65,7 +65,7 @@ async function updateAutostart(event: Event) {
       typeof cause === 'string'
         ? cause
         : 'Não foi possível alterar a inicialização.',
-      true,
+      !enabled,
     )
   } finally {
     busy.value = false
@@ -139,13 +139,23 @@ async function openFolder() {
 
 async function restoreDefaults() {
   busy.value = true
+  const defaults = defaultPreferences()
+
   try {
-    await invoke('set_autostart_enabled', { enabled: false })
-    const defaults = defaultPreferences()
     await invoke('save_app_preferences', { preferences: defaults })
     preferences.value = defaults
     capturedShortcut.value = DEFAULT_SHORTCUT
-    showMessage('Preferências padrão restauradas.')
+    showMessage('Preferências restauradas')
+
+    try {
+      await invoke('set_autostart_enabled', { enabled: false })
+    } catch (cause) {
+      showMessage(
+        typeof cause === 'string'
+          ? `Preferências restauradas. Não foi possível confirmar o autostart: ${cause}`
+          : 'Preferências restauradas. Não foi possível confirmar o autostart.',
+      )
+    }
   } catch (cause) {
     showMessage(
       typeof cause === 'string'
@@ -236,4 +246,24 @@ onMounted(load)
 
 <style scoped>
 .backdrop{position:fixed;z-index:40;inset:0;display:grid;padding:30px;place-items:center;background:#03050bb8;backdrop-filter:blur(8px)}.modal{width:min(100%,590px);max-height:100%;padding:27px;overflow-y:auto;border:1px solid #ffffff1c;border-radius:21px;background:#151827;box-shadow:0 30px 90px #0008}header,footer,.option,.section-heading{display:flex;align-items:center}header{justify-content:space-between}header small{color:#8d82ff;font-size:10px;font-weight:700;letter-spacing:.14em}h2{margin:5px 0 0;font-size:21px}header button{width:32px;height:32px;border:0;border-radius:9px;color:#9297aa;background:#ffffff0d;font-size:20px;cursor:pointer}.options{margin-top:23px}.options.disabled{opacity:.72}.option{padding:16px 0;justify-content:space-between;border-bottom:1px solid #ffffff12;gap:20px}.option span{display:flex;flex-direction:column;gap:5px}.option strong{font-size:12px}.option small{color:#7f8498;font-size:10px}.option input{position:relative;width:38px;height:21px;flex:none;appearance:none;border-radius:999px;background:#34384a;cursor:pointer;transition:.15s}.option input::after{position:absolute;top:3px;left:3px;width:15px;height:15px;border-radius:50%;background:#a6aabc;content:"";transition:.15s}.option input:checked{background:#6d5edf}.option input:checked::after{left:20px;background:#fff}.shortcut-section{padding:19px 0;border-bottom:1px solid #ffffff12}.section-heading{margin-bottom:10px;justify-content:space-between}.section-heading span,.path>span{color:#a5a9ba;font-size:10px;font-weight:700;letter-spacing:.08em}.section-heading b{padding:4px 7px;border-radius:6px;color:#aaa4ee;background:#8b7cff14;font-size:9px}.shortcut-capture{display:flex;width:100%;min-height:60px;padding:10px 13px;align-items:center;justify-content:space-between;border:1px solid #ffffff1a;border-radius:10px;color:#eee;background:#0e111d;cursor:pointer;gap:12px}.shortcut-capture.capturing{border-color:#8b7cff99;box-shadow:0 0 0 3px #8b7cff1c}.shortcut-capture small{color:#777c91;font-size:9px}.shortcut-capture kbd{padding:7px 9px;border:1px solid #ffffff1a;border-radius:7px;color:#d3cfff;background:#ffffff0a;font-family:inherit;font-size:11px}.save-shortcut{margin-top:9px;padding:8px 11px;border:1px solid #8b7cff3d;border-radius:8px;color:#bcb6ff;background:#8b7cff14;cursor:pointer}.shortcut-section p{margin:11px 0 0;color:#676c80;font-size:9px}.path{display:flex;padding:18px 0 5px;flex-direction:column;gap:8px}.path code{overflow:hidden;padding:11px 12px;border:1px solid #ffffff14;border-radius:9px;color:#9297aa;background:#0e111d;font-family:Consolas,monospace;font-size:9px;text-overflow:ellipsis;white-space:nowrap}.path button{align-self:flex-start;padding:8px 11px;border:1px solid #8b7cff3d;border-radius:8px;color:#bcb6ff;background:#8b7cff14;cursor:pointer}.message{margin:15px 0 0;padding:9px 11px;border-radius:8px;color:#79dac8;background:#55d6be12;font-size:10px}.message.error{color:#ff9bae;background:#ff647e12}footer{margin-top:22px;padding-top:17px;justify-content:flex-end;border-top:1px solid #ffffff12;gap:9px}footer button{padding:9px 14px;border:1px solid #ffffff1a;border-radius:9px;color:#bfc2d0;background:transparent;cursor:pointer}.primary{border-color:#7567e8;color:#fff;background:#6759d7}button:disabled,input:disabled{cursor:not-allowed;opacity:.5}
+
+.modal {
+  max-height: calc(100vh - 60px);
+  scrollbar-color: #3a3f55 transparent;
+  scrollbar-width: thin;
+}
+
+.modal::-webkit-scrollbar {
+  width: 8px;
+}
+
+.modal::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.modal::-webkit-scrollbar-thumb {
+  border: 2px solid #151827;
+  border-radius: 999px;
+  background: #3a3f55;
+}
 </style>

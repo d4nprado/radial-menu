@@ -315,17 +315,20 @@ pub fn save_app_preferences(
 #[tauri::command]
 pub fn set_autostart_enabled(app: tauri::AppHandle, enabled: bool) -> Result<(), String> {
     let manager = app.autolaunch();
-    if enabled {
+    let result = if enabled {
         manager.enable()
     } else {
         manager.disable()
+    };
+
+    if let Err(error) = result {
+        if enabled || !is_missing_autostart_error(&error) {
+            return Err(config_error(
+                "Não foi possível alterar a inicialização com o sistema",
+                error,
+            ));
+        }
     }
-    .map_err(|error| {
-        config_error(
-            "Não foi possível alterar a inicialização com o sistema",
-            error,
-        )
-    })?;
 
     let mut response = load_preferences_internal(&app)?;
     response.preferences.start_with_windows = enabled;
@@ -340,6 +343,14 @@ pub fn get_autostart_enabled(app: tauri::AppHandle) -> Result<bool, String> {
             error,
         )
     })
+}
+
+fn is_missing_autostart_error(error: &impl std::fmt::Display) -> bool {
+    let message = error.to_string().to_lowercase();
+    message.contains("(os error 2)")
+        || message.contains("cannot find the file")
+        || message.contains("não pode encontrar o arquivo")
+        || message.contains("no such file or directory")
 }
 
 fn replace_global_shortcut(
