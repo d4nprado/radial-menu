@@ -46,11 +46,22 @@ pub struct LauncherMenuItem {
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum LauncherAction {
-    Program { path: String },
-    Directory { path: String },
-    Url { url: String },
-    System { target: SystemActionTarget },
-    Group { items: Vec<LauncherMenuItem> },
+    Program {
+        path: String,
+    },
+    Directory {
+        path: String,
+    },
+    Url {
+        #[serde(alias = "value", alias = "path")]
+        url: String,
+    },
+    System {
+        target: SystemActionTarget,
+    },
+    Group {
+        items: Vec<LauncherMenuItem>,
+    },
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -275,6 +286,8 @@ pub fn load_launcher_config(app: tauri::AppHandle) -> Result<LauncherConfigRespo
 
 #[tauri::command]
 pub fn save_launcher_config(app: tauri::AppHandle, config: LauncherConfig) -> Result<(), String> {
+    let mut config = config;
+    normalize_action_urls(&mut config.items)?;
     validate_launcher_config(&config)?;
     write_json(&launcher_config_path(&app)?, &config)?;
     app.emit(CONFIG_UPDATED_EVENT, config).map_err(|error| {
@@ -283,6 +296,19 @@ pub fn save_launcher_config(app: tauri::AppHandle, config: LauncherConfig) -> Re
             error,
         )
     })
+}
+
+fn normalize_action_urls(items: &mut [LauncherMenuItem]) -> Result<(), String> {
+    for item in items {
+        match &mut item.action {
+            LauncherAction::Url { url } => {
+                *url = crate::commands::normalize_http_url(url)?;
+            }
+            LauncherAction::Group { items } => normalize_action_urls(items)?,
+            _ => {}
+        }
+    }
+    Ok(())
 }
 
 #[tauri::command]

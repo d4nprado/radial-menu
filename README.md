@@ -48,11 +48,10 @@ personalizáveis, agrupamentos e uma interface de configuração visual.
 - agrupamentos de ações, com até 10 itens por nível;
 - persistência da configuração no AppData do usuário;
 - status de CPU, RAM, disco e rede no centro do menu;
-- abertura de programas e diretórios;
+- abertura de programas, diretórios e URLs;
+- ações rápidas para Explorador de Arquivos, terminal, Calculadora e Bloco de
+  Notas;
 - instalação no Windows por meio de instalador NSIS.
-
-> **Nota:** os tipos URL e ações do sistema já aparecem no editor, mas sua
-> execução ainda não está implementada.
 
 ## Download
 

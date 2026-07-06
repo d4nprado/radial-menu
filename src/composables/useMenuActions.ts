@@ -13,10 +13,10 @@ const executors: {
     invoke('open_program', { path: action.path }),
   directory: (action) =>
     invoke('open_directory', { path: action.path }),
-  url: () =>
-    Promise.reject('A execução de URLs será implementada em uma próxima etapa.'),
-  system: () =>
-    Promise.reject('A execução de ações do sistema será implementada em uma próxima etapa.'),
+  url: (action) =>
+    invoke('open_url', { url: action.url }),
+  system: (action) =>
+    invoke('execute_system_action', { target: action.target }),
   group: () =>
     Promise.reject('Grupos devem ser abertos pelo menu, não executados como ações.'),
 }

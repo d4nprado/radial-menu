@@ -91,7 +91,13 @@ async function selectDirectory() {
 function buildAction(): MenuAction {
   if (form.actionType === 'program') return { type: 'program', path: form.value.trim() }
   if (form.actionType === 'directory') return { type: 'directory', path: form.value.trim() }
-  if (form.actionType === 'url') return { type: 'url', url: form.value.trim() }
+  if (form.actionType === 'url') {
+    const value = form.value.trim()
+    const url = /^https?:\/\//i.test(value) || value.includes('://')
+      ? value
+      : `https://${value}`
+    return { type: 'url', url }
+  }
   if (form.actionType === 'group') {
     const items = props.item?.action.type === 'group'
       ? structuredClone(toRaw(props.item.action.items))
@@ -167,7 +173,6 @@ function submit() {
           <span>Ação padrão</span>
           <select v-model="form.systemTarget">
             <option value="explorer">Explorador de arquivos</option>
-            <option value="default_browser">Navegador padrão</option>
             <option value="terminal">Terminal</option>
             <option value="calculator">Calculadora</option>
             <option value="notepad">Bloco de notas</option>
@@ -186,8 +191,9 @@ function submit() {
             <input
               v-model="form.value"
               required
-              :type="form.actionType === 'url' ? 'url' : 'text'"
-              :placeholder="form.actionType === 'url' ? 'https://exemplo.com' : 'C:\\Caminho'"
+              type="text"
+              :inputmode="form.actionType === 'url' ? 'url' : 'text'"
+              :placeholder="form.actionType === 'url' ? 'Ex.: https://github.com, youtube.com, chatgpt.com' : 'C:\\Caminho'"
             >
             <button
               v-if="form.actionType === 'program'"
