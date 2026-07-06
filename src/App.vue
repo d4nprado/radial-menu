@@ -104,7 +104,6 @@ onBeforeUnmount(() => {
   <main>
     <RadialMenu
       :items="menuConfig.items"
-      :shortcut="menuConfig.shortcut"
       :phase="phase"
       :stats="stats"
       :disabled="isExecuting"
