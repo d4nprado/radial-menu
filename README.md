@@ -11,13 +11,25 @@ personalizáveis, agrupamentos e uma interface de configuração visual.
 
 ## Preview
 
-> Screenshots e GIFs serão adicionados em breve.
+### Menu radial
 
-<!--
-Quando os arquivos estiverem disponíveis:
 ![Menu radial do Orbit Launcher](docs/screenshots/radial-menu.png)
-![Janela de configuração](docs/screenshots/config-window.png)
--->
+
+### Menu radial dentro de um grupo
+
+![Menu radial dentro de um grupo](docs/screenshots/group-radial-menu.png)
+
+### Configuração visual
+
+![Janela de configuração do Orbit Launcher](docs/screenshots/config-window.png)
+
+### Agrupamentos na configuração
+
+![Configuração de agrupamentos](docs/screenshots/group-config.png)
+
+### Preferências
+
+![Preferências do Orbit Launcher](docs/screenshots/preferences.png)
 
 ## Funcionalidades
 
