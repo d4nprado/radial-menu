@@ -1,6 +1,7 @@
 mod commands;
 mod config;
 mod mouse_shortcut;
+mod stream;
 mod system_stats;
 
 use tauri::{
@@ -141,6 +142,11 @@ pub fn run() {
             config::save_app_preferences,
             config::set_autostart_enabled,
             config::get_autostart_enabled,
+            stream::get_stream_preferences,
+            stream::save_stream_preferences,
+            stream::test_obs_connection,
+            stream::list_obs_scenes,
+            stream::execute_stream_action,
             mouse_shortcut::start_mouse_shortcut_capture,
             mouse_shortcut::cancel_mouse_shortcut_capture,
             system_stats::get_system_stats,
