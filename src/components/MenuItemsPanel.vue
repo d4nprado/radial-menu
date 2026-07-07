@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { MenuAction, MenuItem, SystemActionTarget } from '../types/menu'
+import type { MenuAction, MenuItem, StreamOperation, SystemActionTarget } from '../types/menu'
 import MenuItemIcon from './MenuItemIcon.vue'
 
 defineProps<{
@@ -32,6 +32,20 @@ const systemLabels: Record<SystemActionTarget, string> = {
   notepad: 'Bloco de notas',
 }
 
+const streamOperationLabels: Record<StreamOperation, string> = {
+  set_scene: 'Trocar cena',
+  start_recording: 'Iniciar gravacao',
+  stop_recording: 'Parar gravacao',
+  toggle_recording: 'Alternar gravacao',
+  start_streaming: 'Iniciar transmissao',
+  stop_streaming: 'Parar transmissao',
+  toggle_streaming: 'Alternar transmissao',
+  set_input_mute: 'Alterar mute de audio',
+  toggle_input_mute: 'Alternar mute de audio',
+  set_source_visibility: 'Alterar fonte',
+  toggle_source_visibility: 'Alternar fonte',
+}
+
 function itemSubtitle(item: MenuItem) {
   const action = item.action
   if (action.type === 'group') {
@@ -42,7 +56,12 @@ function itemSubtitle(item: MenuItem) {
     return `${actionLabels[action.type]} · ${action.path}`
   }
   if (action.type === 'url') return `${actionLabels.url} · ${action.url}`
-  if (action.type === 'stream') return `${actionLabels.stream} · ${action.sceneName}`
+  if (action.type === 'stream') {
+    const target = action.sourceName ?? action.inputName ?? action.sceneName
+    return [actionLabels.stream, streamOperationLabels[action.operation], target]
+      .filter(Boolean)
+      .join(' · ')
+  }
   return `${actionLabels.system} · ${systemLabels[action.target]}`
 }
 </script>

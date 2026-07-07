@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { CenterAction, MenuItem } from '../types/menu'
+import type { CenterAction, MenuItem, ObsStreamStatus } from '../types/menu'
 import type { SystemStats } from '../types/systemStats'
 import RadialMenuItem from './RadialMenuItem.vue'
 import SystemStatus from './SystemStatus.vue'
@@ -13,10 +13,12 @@ const props = withDefaults(defineProps<{
   centerAction?: CenterAction
   levelKey?: string
   menuSize?: number
+  obsStreamStatus?: ObsStreamStatus | null
 }>(), {
   centerAction: 'close',
   levelKey: 'main',
   menuSize: 0,
+  obsStreamStatus: null,
 })
 
 defineEmits<{
@@ -55,6 +57,7 @@ const menuStyle = computed(() => ({
         :total="items.length"
         :disabled="disabled"
         :menu-size="menuSize"
+        :obs-stream-status="obsStreamStatus"
         @select="$emit('select', $event)"
       />
 

@@ -25,11 +25,28 @@ export type SystemAction = {
   target: SystemActionTarget
 }
 
+export type StreamOperation =
+  | 'set_scene'
+  | 'start_recording'
+  | 'stop_recording'
+  | 'toggle_recording'
+  | 'start_streaming'
+  | 'stop_streaming'
+  | 'toggle_streaming'
+  | 'set_input_mute'
+  | 'toggle_input_mute'
+  | 'set_source_visibility'
+  | 'toggle_source_visibility'
+
 export type StreamAction = {
   type: 'stream'
   provider: 'obs'
-  operation: 'set_scene'
-  sceneName: string
+  operation: StreamOperation
+  sceneName?: string
+  inputName?: string
+  sourceName?: string
+  muted?: boolean
+  visible?: boolean
 }
 
 export type GroupAction = {
@@ -98,4 +115,14 @@ export type StreamPreferencesLoadResponse = {
 export type ObsConnectionStatus = {
   ok: boolean
   message: string
+}
+
+export type ObsStreamStatus = {
+  recording: {
+    active: boolean
+  }
+  streaming: {
+    active: boolean
+  }
+  inputMutes: Record<string, boolean>
 }

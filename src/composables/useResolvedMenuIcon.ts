@@ -8,6 +8,12 @@ export type FixedIconKind =
   | 'calculator'
   | 'notepad'
   | 'broadcast'
+  | 'mic'
+  | 'mic-muted'
+  | 'speaker'
+  | 'speaker-muted'
+  | 'audio'
+  | 'audio-muted'
   | 'group'
 
 export type ProgramIconPayload = {
