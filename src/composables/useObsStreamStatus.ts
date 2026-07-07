@@ -16,6 +16,7 @@ export function streamToggleState(
 ): StreamToggleState | null {
   if (action.provider !== 'obs') return null
   if (!status) return null
+  if (status.available === false || status.stale) return null
 
   if (action.operation === 'toggle_recording') {
     const active = status.recording.active

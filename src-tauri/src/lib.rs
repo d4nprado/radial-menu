@@ -35,6 +35,7 @@ pub fn run() {
     let app = tauri::Builder::default()
         .manage(system_stats::SystemStatsState::new())
         .manage(config::ShortcutRegistrationState::new())
+        .manage(stream::ObsClientState::new())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,

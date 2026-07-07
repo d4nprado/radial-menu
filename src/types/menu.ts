@@ -125,4 +125,6 @@ export type ObsStreamStatus = {
     active: boolean
   }
   inputMutes: Record<string, boolean>
+  available?: boolean
+  stale?: boolean
 }
