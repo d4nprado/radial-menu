@@ -1,6 +1,6 @@
 [package]
 name = "orbit-launcher"
-version = "0.5.0"
+version = "0.6.0"
 description = "A fast radial launcher for Windows"
 authors = ["Orbit Launcher contributors"]
 edition = "2021"
