@@ -30,7 +30,6 @@ const { execute, isExecuting, error } = useMenuActions()
 const {
   status: obsStreamStatus,
   refresh: refreshObsStreamStatus,
-  clear: clearObsStreamStatus,
 } = useObsStreamStatus()
 const { stats, start: startStats, stop: stopStats } = useSystemStats()
 const unlisteners: UnlistenFn[] = []
@@ -39,12 +38,9 @@ let hideTimer: number | undefined
 function showAnimation() {
   window.clearTimeout(hideTimer)
   navigationStack.value = []
-  clearObsStreamStatus()
-  if (hasStreamToggle(menuConfig.value.items)) {
-    void refreshObsStreamStatus(obsToggleInputNames(menuConfig.value.items))
-  }
   startStats()
   phase.value = 'entering'
+  refreshVisibleObsStatus()
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
       phase.value = 'visible'
@@ -52,19 +48,25 @@ function showAnimation() {
   })
 }
 
-function hasStreamToggle(items: MenuItem[]): boolean {
+function refreshVisibleObsStatus() {
+  const items = visibleItems.value
+  if (hasVisibleStreamToggle(items)) {
+    void refreshObsStreamStatus(obsToggleInputNames(items))
+  }
+}
+
+function hasVisibleStreamToggle(items: MenuItem[]): boolean {
   return items.some((item) => {
-    if (item.action.type === 'group') return hasStreamToggle(item.action.items)
     return item.action.type === 'stream'
       && (item.action.operation === 'toggle_recording'
         || item.action.operation === 'toggle_streaming'
-        || item.action.operation === 'toggle_input_mute')
+        || item.action.operation === 'toggle_input_mute'
+        || item.action.operation === 'toggle_source_visibility')
   })
 }
 
 function obsToggleInputNames(items: MenuItem[]): string[] {
   return items.flatMap((item) => {
-    if (item.action.type === 'group') return obsToggleInputNames(item.action.items)
     if (
       item.action.type === 'stream'
       && item.action.operation === 'toggle_input_mute'
@@ -80,7 +82,8 @@ function isObsToggleAction(action: MenuAction) {
   return action.type === 'stream'
     && (action.operation === 'toggle_recording'
       || action.operation === 'toggle_streaming'
-      || action.operation === 'toggle_input_mute')
+      || action.operation === 'toggle_input_mute'
+      || action.operation === 'toggle_source_visibility')
 }
 
 function applySuccessfulStreamToggle(action: MenuAction) {
@@ -126,6 +129,7 @@ function dismiss() {
 async function selectItem(item: MenuItem) {
   if (item.action.type === 'group') {
     navigationStack.value = [item]
+    refreshVisibleObsStatus()
     return
   }
 
@@ -133,7 +137,7 @@ async function selectItem(item: MenuItem) {
     await execute(item.action)
     if (isObsToggleAction(item.action)) {
       applySuccessfulStreamToggle(item.action)
-      void refreshObsStreamStatus(obsToggleInputNames(menuConfig.value.items))
+      refreshVisibleObsStatus()
     }
     dismiss()
   } catch {
@@ -156,6 +160,7 @@ function onKeydown(event: KeyboardEvent) {
 function handleCenterAction(action: CenterAction) {
   if (action === 'back') {
     navigationStack.value = []
+    refreshVisibleObsStatus()
   } else {
     dismiss()
   }
