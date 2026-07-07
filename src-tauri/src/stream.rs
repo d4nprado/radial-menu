@@ -133,8 +133,16 @@ pub struct ObsStreamStatus {
     pub recording: ObsOutputStatus,
     pub streaming: ObsOutputStatus,
     pub input_mutes: HashMap<String, bool>,
+    pub source_visibilities: HashMap<String, bool>,
     pub available: bool,
     pub stale: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ObsSourceStatusTarget {
+    pub scene_name: String,
+    pub source_name: String,
 }
 
 impl Default for StreamPreferences {
@@ -310,6 +318,7 @@ pub fn get_obs_stream_status(app: tauri::AppHandle) -> Result<ObsStreamStatus, S
                 active: output_is_active(socket, "GetStreamStatus")?,
             },
             input_mutes: HashMap::new(),
+            source_visibilities: HashMap::new(),
             available: true,
             stale: false,
         })
@@ -371,6 +380,56 @@ pub fn get_obs_input_mute_statuses(
             remember_status_failure(&app);
             eprintln!("Atualizacao de status OBS de audio falhou: {error}");
             Ok(cached_input_mutes(&app))
+        }
+    }
+}
+
+#[tauri::command]
+pub fn get_obs_source_visibility_statuses(
+    app: tauri::AppHandle,
+    sources: Vec<ObsSourceStatusTarget>,
+) -> Result<HashMap<String, bool>, String> {
+    if is_status_in_cooldown(&app) {
+        eprintln!("Pulando consulta OBS de fontes durante cooldown.");
+        return Ok(cached_source_visibilities(&app));
+    }
+
+    let result = with_obs_status_connection(&app, |socket| {
+        let mut statuses = HashMap::new();
+
+        for source in sources {
+            let scene_name = source.scene_name.trim();
+            let source_name = source.source_name.trim();
+            let key = source_visibility_key(scene_name, source_name);
+            if scene_name.is_empty() || source_name.is_empty() || statuses.contains_key(&key) {
+                continue;
+            }
+
+            match scene_item_id(socket, scene_name, source_name)
+                .and_then(|scene_item_id| scene_item_is_enabled(socket, scene_name, scene_item_id))
+            {
+                Ok(visible) => {
+                    statuses.insert(key, visible);
+                }
+                Err(error) if is_obs_connection_error(&error) => return Err(error),
+                Err(_) => {}
+            }
+        }
+
+        Ok(statuses)
+    });
+
+    match result {
+        Ok(statuses) => {
+            remember_source_visibility_success(&app, &statuses);
+            eprintln!("Atualizacao de status OBS de fontes concluida.");
+            Ok(statuses)
+        }
+        Err(ObsStatusAttemptError::Busy) => Ok(cached_source_visibilities(&app)),
+        Err(ObsStatusAttemptError::Failed(error)) => {
+            remember_status_failure(&app);
+            eprintln!("Atualizacao de status OBS de fontes falhou: {error}");
+            Ok(cached_source_visibilities(&app))
         }
     }
 }
@@ -752,6 +811,29 @@ fn remember_input_mute_success(app: &tauri::AppHandle, statuses: &HashMap<String
     current.consecutive_failures = 0;
 }
 
+fn remember_source_visibility_success(app: &tauri::AppHandle, statuses: &HashMap<String, bool>) {
+    let state = app.state::<ObsClientState>();
+    let Ok(mut current) = state.status.lock() else {
+        return;
+    };
+
+    let mut status = current
+        .cached
+        .as_ref()
+        .map(|cached| cached.status.clone())
+        .unwrap_or_else(|| empty_obs_status(true, false));
+    status.available = true;
+    status.stale = false;
+    for (source_key, visible) in statuses {
+        status
+            .source_visibilities
+            .insert(source_key.clone(), *visible);
+    }
+    current.cached = Some(CachedObsStatus { status });
+    current.cooldown_until = None;
+    current.consecutive_failures = 0;
+}
+
 fn remember_status_failure(app: &tauri::AppHandle) {
     let state = app.state::<ObsClientState>();
     let Ok(mut status) = state.status.lock() else {
@@ -796,6 +878,21 @@ fn cached_input_mutes(app: &tauri::AppHandle) -> HashMap<String, bool> {
         .unwrap_or_default()
 }
 
+fn cached_source_visibilities(app: &tauri::AppHandle) -> HashMap<String, bool> {
+    let state = app.state::<ObsClientState>();
+    state
+        .status
+        .lock()
+        .ok()
+        .and_then(|status| {
+            status
+                .cached
+                .as_ref()
+                .map(|cached| cached.status.source_visibilities.clone())
+        })
+        .unwrap_or_default()
+}
+
 impl ObsStatusState {
     fn cached_status_or_empty(&self, stale: bool) -> ObsStreamStatus {
         self.cached
@@ -815,9 +912,14 @@ fn empty_obs_status(available: bool, stale: bool) -> ObsStreamStatus {
         recording: ObsOutputStatus { active: false },
         streaming: ObsOutputStatus { active: false },
         input_mutes: HashMap::new(),
+        source_visibilities: HashMap::new(),
         available,
         stale,
     }
+}
+
+fn source_visibility_key(scene_name: &str, source_name: &str) -> String {
+    format!("{}::{}", scene_name.trim(), source_name.trim())
 }
 
 fn output_is_active(socket: &mut ObsSocket, request_type: &str) -> Result<bool, String> {

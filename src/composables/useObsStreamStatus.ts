@@ -1,6 +1,10 @@
 import { ref } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
-import type { FixedIconKind } from './useResolvedMenuIcon'
+import {
+  audioInputKind,
+  sourceLooksLikeCamera,
+  type FixedIconKind,
+} from './useResolvedMenuIcon'
 import type { MenuItem, ObsStreamStatus, StreamAction } from '../types/menu'
 
 export type StreamToggleState = {
@@ -8,6 +12,15 @@ export type StreamToggleState = {
   hint: string
   icon?: FixedIconKind
   showInactiveLed?: boolean
+}
+
+export type SourceStatusTarget = {
+  sceneName: string
+  sourceName: string
+}
+
+export function sourceVisibilityKey(sceneName: string, sourceName: string) {
+  return `${sceneName.trim()}::${sourceName.trim()}`
 }
 
 export function streamToggleState(
@@ -50,6 +63,26 @@ export function streamToggleState(
     }
   }
 
+  if (action.operation === 'toggle_source_visibility') {
+    const sceneName = action.sceneName?.trim()
+    const sourceName = action.sourceName?.trim()
+    if (!sceneName || !sourceName) return null
+
+    const key = sourceVisibilityKey(sceneName, sourceName)
+    if (!(key in status.sourceVisibilities)) return null
+
+    const visible = status.sourceVisibilities[key] ?? true
+    const camera = sourceLooksLikeCamera(sourceName)
+    return {
+      active: !visible,
+      hint: visible ? 'Fonte visivel' : 'Fonte oculta',
+      icon: camera
+        ? (visible ? 'camera' : 'camera-off')
+        : (visible ? 'source' : 'source-hidden'),
+      showInactiveLed: false,
+    }
+  }
+
   return null
 }
 
@@ -65,10 +98,12 @@ export function useObsStreamStatus() {
   const status = ref<ObsStreamStatus | null>(null)
   const isLoading = ref(false)
 
-  async function refresh(inputNames: string[] = []) {
+  async function refresh(inputNames: string[] = [], sourceTargets: SourceStatusTarget[] = []) {
     isLoading.value = true
     try {
       const nextStatus = await invoke<ObsStreamStatus>('get_obs_stream_status')
+      nextStatus.inputMutes ??= {}
+      nextStatus.sourceVisibilities ??= {}
       const uniqueInputNames = Array.from(new Set(
         inputNames
           .map((inputName) => inputName.trim())
@@ -78,6 +113,23 @@ export function useObsStreamStatus() {
         nextStatus.inputMutes = await invoke<Record<string, boolean>>(
           'get_obs_input_mute_statuses',
           { inputNames: uniqueInputNames },
+        )
+      }
+      const uniqueSources = Array.from(
+        new Map(
+          sourceTargets
+            .map((source) => ({
+              sceneName: source.sceneName.trim(),
+              sourceName: source.sourceName.trim(),
+            }))
+            .filter((source) => source.sceneName && source.sourceName)
+            .map((source) => [sourceVisibilityKey(source.sceneName, source.sourceName), source]),
+        ).values(),
+      )
+      if (uniqueSources.length) {
+        nextStatus.sourceVisibilities = await invoke<Record<string, boolean>>(
+          'get_obs_source_visibility_statuses',
+          { sources: uniqueSources },
         )
       }
       status.value = nextStatus
@@ -94,20 +146,6 @@ export function useObsStreamStatus() {
   }
 
   return { status, isLoading, refresh, clear }
-}
-
-function audioInputKind(inputName: string): 'mic' | 'speaker' | 'audio' {
-  const normalized = inputName
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-
-  if (/\b(mic|microphone|microfone|mic\/aux|aux)\b/.test(normalized)) return 'mic'
-  if (
-    /\b(desktop|speaker|speakers|alto[- ]?falante|volume|output|saida|audio do desktop)\b/
-      .test(normalized)
-  ) return 'speaker'
-  return 'audio'
 }
 
 function audioIcon(kind: 'mic' | 'speaker' | 'audio', muted: boolean): FixedIconKind {

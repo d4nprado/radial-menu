@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import type { MenuAction, MenuItem, StreamOperation, SystemActionTarget } from '../types/menu'
+import { itemStreamToggleState } from '../composables/useObsStreamStatus'
+import type { MenuAction, MenuItem, ObsStreamStatus, StreamOperation, SystemActionTarget } from '../types/menu'
 import MenuItemIcon from './MenuItemIcon.vue'
 
-defineProps<{
+const props = defineProps<{
   items: MenuItem[]
   selectedId: string | null
   groupLabel: string | null
+  obsStreamStatus?: ObsStreamStatus | null
 }>()
 
 const emit = defineEmits<{
@@ -64,6 +66,15 @@ function itemSubtitle(item: MenuItem) {
   }
   return `${actionLabels.system} · ${systemLabels[action.target]}`
 }
+
+function itemStreamState(item: MenuItem) {
+  return itemStreamToggleState(item, props.obsStreamStatus ?? null)
+}
+
+function showStreamLed(item: MenuItem) {
+  const state = itemStreamState(item)
+  return Boolean(state?.active || state?.showInactiveLed)
+}
 </script>
 
 <template>
@@ -90,7 +101,12 @@ function itemSubtitle(item: MenuItem) {
         @click="emit('select', item.id)"
       >
         <span class="items-panel__icon" :style="{ '--item-accent': item.accent }">
-          <MenuItemIcon :item="item" />
+          <i
+            v-if="showStreamLed(item)"
+            class="items-panel__stream-led"
+            aria-hidden="true"
+          />
+          <MenuItemIcon :item="item" :fixed-icon-override="itemStreamState(item)?.icon" />
         </span>
 
         <span class="items-panel__copy">
@@ -250,6 +266,7 @@ h2 {
 
 .items-panel__icon {
   --item-accent: #8b7cff;
+  position: relative;
   display: grid;
   width: 38px;
   height: 38px;
@@ -261,6 +278,17 @@ h2 {
   background: color-mix(in srgb, var(--item-accent) 10%, transparent);
   font-size: 11px;
   font-weight: 700;
+}
+
+.items-panel__stream-led {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ff4768;
+  box-shadow: 0 0 7px rgb(255 71 104 / 72%);
 }
 
 .items-panel__copy {
