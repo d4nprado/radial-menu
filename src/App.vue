@@ -165,7 +165,7 @@ function dismiss() {
 
 async function selectItem(item: MenuItem) {
   if (item.action.type === 'group') {
-    navigationStack.value = [item]
+    navigationStack.value = [...navigationStack.value, item]
     refreshVisibleObsStatus()
     return
   }
@@ -188,7 +188,8 @@ function onKeydown(event: KeyboardEvent) {
   if (event.key !== 'Escape') return
 
   if (navigationStack.value.length) {
-    navigationStack.value = []
+    navigationStack.value = navigationStack.value.slice(0, -1)
+    refreshVisibleObsStatus()
   } else {
     dismiss()
   }
@@ -196,7 +197,7 @@ function onKeydown(event: KeyboardEvent) {
 
 function handleCenterAction(action: CenterAction) {
   if (action === 'back') {
-    navigationStack.value = []
+    navigationStack.value = navigationStack.value.slice(0, -1)
     refreshVisibleObsStatus()
   } else {
     dismiss()

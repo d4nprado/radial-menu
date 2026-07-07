@@ -11,6 +11,7 @@ import type {
 const props = defineProps<{
   item?: MenuItem | null
   allowGroups: boolean
+  groupDepthLimitReached?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -390,7 +391,8 @@ function buildAction(): MenuAction {
 }
 
 function selectItemKind(kind: ItemKind) {
-  if (!props.allowGroups || isEditing.value) return
+  if (isEditing.value) return
+  if (kind === 'group' && !props.allowGroups) return
   form.itemKind = kind
 }
 
@@ -445,7 +447,10 @@ function submit() {
           </span>
         </label>
 
-        <div v-if="allowGroups" class="item-modal__wide item-kind-field">
+        <div
+          v-if="allowGroups || groupDepthLimitReached || isGroup"
+          class="item-modal__wide item-kind-field"
+        >
           <span>Categoria do item</span>
           <div class="item-kind-toggle" role="group" aria-label="Categoria do item">
             <button
@@ -462,7 +467,7 @@ function submit() {
               type="button"
               :class="{ 'is-active': isGroup }"
               :aria-pressed="isGroup"
-              :disabled="isEditing"
+              :disabled="isEditing || !allowGroups"
               @click="selectItemKind('group')"
             >
               <strong>Grupo</strong>
@@ -471,6 +476,9 @@ function submit() {
           </div>
           <small v-if="isEditing" class="item-kind-field__hint">
             A categoria não pode ser alterada durante a edição.
+          </small>
+          <small v-else-if="groupDepthLimitReached" class="item-kind-field__hint">
+            Limite de profundidade de grupos atingido.
           </small>
         </div>
 
