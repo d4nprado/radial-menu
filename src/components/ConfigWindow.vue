@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { invoke } from '@tauri-apps/api/core'
 import { computed, onMounted, ref, toRaw } from 'vue'
-import { useObsStreamStatus } from '../composables/useObsStreamStatus'
+import {
+  useObsStreamStatus,
+  type SourceStatusTarget,
+} from '../composables/useObsStreamStatus'
 import {
   MAX_MENU_ITEMS_PER_LEVEL,
   type ConfigLoadResponse,
@@ -53,7 +56,8 @@ function hasStreamToggle(menuItems: MenuItem[]): boolean {
     return item.action.type === 'stream'
       && (item.action.operation === 'toggle_recording'
         || item.action.operation === 'toggle_streaming'
-        || item.action.operation === 'toggle_input_mute')
+        || item.action.operation === 'toggle_input_mute'
+        || item.action.operation === 'toggle_source_visibility')
   })
 }
 
@@ -71,6 +75,24 @@ function obsToggleInputNames(menuItems: MenuItem[]): string[] {
   })
 }
 
+function obsToggleSourceTargets(menuItems: MenuItem[]): SourceStatusTarget[] {
+  return menuItems.flatMap((item) => {
+    if (item.action.type === 'group') return obsToggleSourceTargets(item.action.items)
+    if (
+      item.action.type === 'stream'
+      && item.action.operation === 'toggle_source_visibility'
+      && item.action.sceneName?.trim()
+      && item.action.sourceName?.trim()
+    ) {
+      return [{
+        sceneName: item.action.sceneName.trim(),
+        sourceName: item.action.sourceName.trim(),
+      }]
+    }
+    return []
+  })
+}
+
 async function loadConfig() {
   busy.value = true
   try {
@@ -80,7 +102,9 @@ async function loadConfig() {
     items.value = cloneItems(response.config.items)
     currentGroupId.value = null
     selectedId.value = items.value[0]?.id ?? null
-    if (hasStreamToggle(items.value)) void refreshObsStreamStatus(obsToggleInputNames(items.value))
+    if (hasStreamToggle(items.value)) {
+      void refreshObsStreamStatus(obsToggleInputNames(items.value), obsToggleSourceTargets(items.value))
+    }
     setStatus(response.warning ?? 'Configuração carregada', response.warning ? 'error' : 'neutral')
   } catch (cause) {
     items.value = []
@@ -283,6 +307,7 @@ onMounted(loadConfig)
         :items="currentItems"
         :selected-id="selectedId"
         :group-label="currentGroup?.label ?? null"
+        :obs-stream-status="obsStreamStatus"
         @select="selectItem"
         @edit="openEditForm"
         @remove="removeItem"

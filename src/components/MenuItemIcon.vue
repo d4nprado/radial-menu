@@ -88,6 +88,14 @@ watch(programIcon, async (icon) => {
       <path d="M6 3.5h12a2 2 0 0 1 2 2v15H4v-15a2 2 0 0 1 2-2z" />
       <path d="M8 2v4M12 2v4M16 2v4M8 10h8M8 14h8M8 18h5" />
     </template>
+    <template v-else-if="fixedIcon === 'scene'">
+      <rect x="3.5" y="4" width="17" height="16" rx="2.5" />
+      <path d="M8 4v16M16 4v16M3.5 10h17M3.5 15h17" />
+    </template>
+    <template v-else-if="fixedIcon === 'record'">
+      <circle cx="12" cy="12" r="8.5" />
+      <circle cx="12" cy="12" r="4.1" />
+    </template>
     <template v-else-if="fixedIcon === 'broadcast'">
       <circle cx="12" cy="12" r="2.4" />
       <path d="M8.5 8.5a5 5 0 0 0 0 7M15.5 8.5a5 5 0 0 1 0 7" />
@@ -107,6 +115,16 @@ watch(programIcon, async (icon) => {
       <path d="M5 10v4h3l4 3.2V6.8L8 10z" />
       <path d="M16.5 8.5a5 5 0 0 1 0 7" />
       <path v-if="fixedIcon === 'audio-muted'" d="M4.5 4.5 19.5 19.5" />
+    </template>
+    <template v-else-if="fixedIcon === 'source' || fixedIcon === 'source-hidden'">
+      <path d="M12 5.2 20 9l-8 3.8L4 9z" />
+      <path d="m4 13 8 3.8 8-3.8M4 17l8 3.8 8-3.8" />
+      <path v-if="fixedIcon === 'source-hidden'" d="M4.5 4.5 19.5 19.5" />
+    </template>
+    <template v-else-if="fixedIcon === 'camera' || fixedIcon === 'camera-off'">
+      <path d="M4 8.5a2 2 0 0 1 2-2h7.5a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z" />
+      <path d="m15.5 10 4.5-2.5v9L15.5 14" />
+      <path v-if="fixedIcon === 'camera-off'" d="M4.5 4.5 19.5 19.5" />
     </template>
     <template v-else>
       <rect x="3" y="3" width="7" height="7" rx="1.5" />

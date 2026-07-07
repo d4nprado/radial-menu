@@ -6,6 +6,10 @@ import RadialMenu from './components/RadialMenu.vue'
 import { useMenuActions } from './composables/useMenuActions'
 import { useObsStreamStatus } from './composables/useObsStreamStatus'
 import { useSystemStats } from './composables/useSystemStats'
+import {
+  sourceVisibilityKey,
+  type SourceStatusTarget,
+} from './composables/useObsStreamStatus'
 import type {
   CenterAction,
   MenuAction,
@@ -51,7 +55,7 @@ function showAnimation() {
 function refreshVisibleObsStatus() {
   const items = visibleItems.value
   if (hasVisibleStreamToggle(items)) {
-    void refreshObsStreamStatus(obsToggleInputNames(items))
+    void refreshObsStreamStatus(obsToggleInputNames(items), obsToggleSourceTargets(items))
   }
 }
 
@@ -73,6 +77,23 @@ function obsToggleInputNames(items: MenuItem[]): string[] {
       && item.action.inputName?.trim()
     ) {
       return [item.action.inputName.trim()]
+    }
+    return []
+  })
+}
+
+function obsToggleSourceTargets(items: MenuItem[]): SourceStatusTarget[] {
+  return items.flatMap((item) => {
+    if (
+      item.action.type === 'stream'
+      && item.action.operation === 'toggle_source_visibility'
+      && item.action.sceneName?.trim()
+      && item.action.sourceName?.trim()
+    ) {
+      return [{
+        sceneName: item.action.sceneName.trim(),
+        sourceName: item.action.sourceName.trim(),
+      }]
     }
     return []
   })
@@ -111,6 +132,22 @@ function applySuccessfulStreamToggle(action: MenuAction) {
       inputMutes: {
         ...obsStreamStatus.value.inputMutes,
         [inputName]: !current,
+      },
+    }
+  }
+
+  if (
+    action.operation === 'toggle_source_visibility'
+    && action.sceneName?.trim()
+    && action.sourceName?.trim()
+  ) {
+    const key = sourceVisibilityKey(action.sceneName, action.sourceName)
+    const current = obsStreamStatus.value.sourceVisibilities[key] ?? true
+    obsStreamStatus.value = {
+      ...obsStreamStatus.value,
+      sourceVisibilities: {
+        ...obsStreamStatus.value.sourceVisibilities,
+        [key]: !current,
       },
     }
   }

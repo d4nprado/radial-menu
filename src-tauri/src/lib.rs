@@ -151,6 +151,7 @@ pub fn run() {
             stream::list_obs_sources_for_scene,
             stream::get_obs_stream_status,
             stream::get_obs_input_mute_statuses,
+            stream::get_obs_source_visibility_statuses,
             stream::execute_stream_action,
             mouse_shortcut::start_mouse_shortcut_capture,
             mouse_shortcut::cancel_mouse_shortcut_capture,
