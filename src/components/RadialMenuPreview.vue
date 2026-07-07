@@ -9,6 +9,7 @@ const props = defineProps<{
   selectedId: string | null
   maxItems: number
   groupLabel: string | null
+  breadcrumbLabel: string
   menuSize: number
   obsStreamStatus?: ObsStreamStatus | null
 }>()
@@ -158,7 +159,7 @@ function showStreamLed(item: MenuItem) {
   <section class="preview-card" aria-labelledby="preview-title">
     <div class="preview-card__heading">
       <div>
-        <span>VISUALIZAÇÃO</span>
+        <span>{{ breadcrumbLabel }}</span>
         <h2 id="preview-title">Preview radial</h2>
       </div>
       <small>{{ items.length }} {{ items.length === 1 ? 'item' : 'itens' }}</small>
@@ -203,7 +204,7 @@ function showStreamLed(item: MenuItem) {
         class="preview-center"
         :class="{ 'is-back': groupLabel }"
         :disabled="!groupLabel"
-        :aria-label="groupLabel ? 'Voltar ao menu principal' : undefined"
+        :aria-label="groupLabel ? 'Voltar um nível' : undefined"
         @click="groupLabel && emit('back')"
       >
         <strong>{{ groupLabel ?? 'ORBIT' }}</strong>

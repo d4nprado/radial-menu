@@ -7,6 +7,7 @@ const props = defineProps<{
   items: MenuItem[]
   selectedId: string | null
   groupLabel: string | null
+  breadcrumbLabel: string
   obsStreamStatus?: ObsStreamStatus | null
 }>()
 
@@ -81,12 +82,12 @@ function showStreamLed(item: MenuItem) {
   <section class="items-panel" aria-labelledby="items-title">
     <div v-if="groupLabel" class="items-panel__breadcrumb">
       <button type="button" @click="emit('back')">← Voltar</button>
-      <span>Grupo: <strong>{{ groupLabel }}</strong></span>
+      <span>{{ breadcrumbLabel }}</span>
     </div>
 
     <div class="items-panel__heading">
       <div>
-        <span>{{ groupLabel ? 'ITENS DO GRUPO' : 'MENU PRINCIPAL' }}</span>
+        <span>{{ breadcrumbLabel }}</span>
         <h2 id="items-title">{{ groupLabel ? groupLabel : 'Itens do menu' }}</h2>
       </div>
       <small>{{ items.length }}/10</small>

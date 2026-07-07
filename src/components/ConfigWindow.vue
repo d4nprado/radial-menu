@@ -15,6 +15,9 @@ import MenuItemFormModal from './MenuItemFormModal.vue'
 import MenuItemsPanel from './MenuItemsPanel.vue'
 import RadialMenuPreview from './RadialMenuPreview.vue'
 
+const MAX_GROUP_DEPTH = 3
+type GroupMenuItem = MenuItem & { action: { type: 'group'; items: MenuItem[] } }
+
 function cloneItems(items: MenuItem[]) {
   return structuredClone(toRaw(items))
 }
@@ -22,15 +25,14 @@ function cloneItems(items: MenuItem[]) {
 const shortcut = ref('Ctrl+Space')
 const radialMenuSize = ref(0)
 const items = ref<MenuItem[]>([])
-const currentGroupId = ref<string | null>(null)
-const currentGroup = computed(() => {
-  const item = items.value.find((candidate) => candidate.id === currentGroupId.value)
-  return item?.action.type === 'group' ? item : null
-})
-const currentItems = computed(() =>
-  currentGroup.value?.action.type === 'group'
-    ? currentGroup.value.action.items
-    : items.value,
+const groupPathIds = ref<string[]>([])
+const groupPath = computed(() => resolveGroupPath(groupPathIds.value))
+const currentGroup = computed(() => groupPath.value.at(-1) ?? null)
+const currentItems = computed(() => currentGroup.value?.action.items ?? items.value)
+const currentDepth = computed(() => groupPath.value.length)
+const canCreateGroup = computed(() => currentDepth.value < MAX_GROUP_DEPTH)
+const breadcrumbLabel = computed(() =>
+  ['Menu principal', ...groupPath.value.map((group) => group.label)].join(' / '),
 )
 const selectedId = ref<string | null>(null)
 const formMode = ref<'add' | 'edit' | null>(null)
@@ -48,6 +50,20 @@ const {
 function setStatus(message: string, kind: 'neutral' | 'success' | 'error' = 'neutral') {
   status.value = message
   statusKind.value = kind
+}
+
+function resolveGroupPath(pathIds: string[]) {
+  const path: GroupMenuItem[] = []
+  let levelItems = items.value
+
+  for (const id of pathIds) {
+    const group = levelItems.find((item) => item.id === id)
+    if (group?.action.type !== 'group') break
+    path.push(group as GroupMenuItem)
+    levelItems = group.action.items
+  }
+
+  return path
 }
 
 function hasStreamToggle(menuItems: MenuItem[]): boolean {
@@ -100,7 +116,7 @@ async function loadConfig() {
     shortcut.value = response.config.shortcut
     radialMenuSize.value = response.config.radialMenuSize ?? 0
     items.value = cloneItems(response.config.items)
-    currentGroupId.value = null
+    groupPathIds.value = []
     selectedId.value = items.value[0]?.id ?? null
     if (hasStreamToggle(items.value)) {
       void refreshObsStreamStatus(obsToggleInputNames(items.value), obsToggleSourceTargets(items.value))
@@ -202,17 +218,29 @@ function reorderItems(fromIndex: number, toIndex: number) {
   setStatus('Alterações ainda não salvas')
 }
 
+function countNestedItems(menuItems: MenuItem[]): number {
+  return menuItems.reduce((total, item) => {
+    if (item.action.type === 'group') {
+      return total + 1 + countNestedItems(item.action.items)
+    }
+    return total + 1
+  }, 0)
+}
+
 function removeItem(id: string) {
   const index = currentItems.value.findIndex((item) => item.id === id)
   if (index < 0) return
 
   const item = currentItems.value[index]
+  const nestedCount = item?.action.type === 'group'
+    ? countNestedItems(item.action.items)
+    : 0
   if (
     item?.action.type === 'group'
     && !window.confirm(
-      item.action.items.length === 1
+      nestedCount === 1
         ? `Excluir o grupo “${item.label}”? O item dentro dele também será removido.`
-        : `Excluir o grupo “${item.label}”? Os ${item.action.items.length} itens dentro dele também serão removidos.`,
+        : `Excluir o grupo “${item.label}”? Os ${nestedCount} itens dentro dele também serão removidos.`,
     )
   ) return
 
@@ -225,16 +253,16 @@ function removeItem(id: string) {
 }
 
 function openGroup(id: string) {
-  const group = items.value.find((item) => item.id === id)
+  const group = currentItems.value.find((item) => item.id === id)
   if (group?.action.type !== 'group') return
 
-  currentGroupId.value = group.id
+  groupPathIds.value = [...groupPathIds.value, group.id]
   selectedId.value = group.action.items[0]?.id ?? null
 }
 
 function closeGroup() {
-  const groupId = currentGroupId.value
-  currentGroupId.value = null
+  const groupId = groupPathIds.value.at(-1) ?? null
+  groupPathIds.value = groupPathIds.value.slice(0, -1)
   selectedId.value = groupId
 }
 
@@ -294,6 +322,7 @@ onMounted(loadConfig)
         :selected-id="selectedId"
         :max-items="MAX_MENU_ITEMS_PER_LEVEL"
         :group-label="currentGroup?.label ?? null"
+        :breadcrumb-label="breadcrumbLabel"
         :menu-size="radialMenuSize"
         :obs-stream-status="obsStreamStatus"
         @select="selectItem"
@@ -307,6 +336,7 @@ onMounted(loadConfig)
         :items="currentItems"
         :selected-id="selectedId"
         :group-label="currentGroup?.label ?? null"
+        :breadcrumb-label="breadcrumbLabel"
         :obs-stream-status="obsStreamStatus"
         @select="selectItem"
         @edit="openEditForm"
@@ -331,7 +361,8 @@ onMounted(loadConfig)
     <MenuItemFormModal
       v-if="formMode"
       :item="editingItem"
-      :allow-groups="!currentGroup"
+      :allow-groups="canCreateGroup"
+      :group-depth-limit-reached="!canCreateGroup"
       @save="saveItem"
       @cancel="closeForm"
     />
