@@ -16,6 +16,7 @@ pub const DEFAULT_SHORTCUT: &str = "Ctrl+Space";
 pub const CONFIG_UPDATED_EVENT: &str = "launcher-config-updated";
 pub const SHORTCUT_UPDATED_EVENT: &str = "launcher-shortcut-updated";
 const MAX_MENU_ITEMS_PER_LEVEL: usize = 10;
+const MAX_GROUP_DEPTH: usize = 3;
 const MIN_RADIAL_MENU_SIZE: u8 = 0;
 const MAX_RADIAL_MENU_SIZE: u8 = 100;
 
@@ -188,12 +189,12 @@ fn write_json<T: Serialize>(path: &Path, value: &T) -> Result<(), String> {
 }
 
 fn validate_launcher_config(config: &LauncherConfig) -> Result<(), String> {
-    validate_menu_items(&config.items, true, "O menu principal")
+    validate_menu_items(&config.items, 0, "O menu principal")
 }
 
 fn validate_menu_items(
     items: &[LauncherMenuItem],
-    allow_groups: bool,
+    depth: usize,
     level_name: &str,
 ) -> Result<(), String> {
     if items.len() > MAX_MENU_ITEMS_PER_LEVEL {
@@ -234,10 +235,10 @@ fn validate_menu_items(
         }
 
         if let LauncherAction::Group { items } = &item.action {
-            if !allow_groups {
-                return Err("Grupos não podem conter outros grupos nesta versão.".into());
+            if depth >= MAX_GROUP_DEPTH {
+                return Err("Limite de profundidade de grupos atingido.".into());
             }
-            validate_menu_items(items, false, &format!("O grupo '{}'", item.label))?;
+            validate_menu_items(items, depth + 1, &format!("O grupo '{}'", item.label))?;
         }
     }
     Ok(())
