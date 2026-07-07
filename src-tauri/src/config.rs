@@ -16,6 +16,8 @@ pub const DEFAULT_SHORTCUT: &str = "Ctrl+Space";
 pub const CONFIG_UPDATED_EVENT: &str = "launcher-config-updated";
 pub const SHORTCUT_UPDATED_EVENT: &str = "launcher-shortcut-updated";
 const MAX_MENU_ITEMS_PER_LEVEL: usize = 10;
+const MIN_RADIAL_MENU_SIZE: u8 = 0;
+const MAX_RADIAL_MENU_SIZE: u8 = 100;
 
 pub struct ShortcutRegistrationState(pub Mutex<String>);
 
@@ -29,6 +31,8 @@ impl ShortcutRegistrationState {
 #[serde(rename_all = "camelCase")]
 pub struct LauncherConfig {
     pub shortcut: String,
+    #[serde(default = "default_radial_menu_size")]
+    pub radial_menu_size: u8,
     pub items: Vec<LauncherMenuItem>,
 }
 
@@ -152,8 +156,20 @@ fn preferences_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
 fn empty_launcher_config() -> LauncherConfig {
     LauncherConfig {
         shortcut: DEFAULT_SHORTCUT.into(),
+        radial_menu_size: default_radial_menu_size(),
         items: Vec::new(),
     }
+}
+
+fn default_radial_menu_size() -> u8 {
+    MIN_RADIAL_MENU_SIZE
+}
+
+fn normalize_launcher_config(config: &mut LauncherConfig) -> Result<(), String> {
+    config.radial_menu_size = config
+        .radial_menu_size
+        .clamp(MIN_RADIAL_MENU_SIZE, MAX_RADIAL_MENU_SIZE);
+    normalize_action_urls(&mut config.items)
 }
 
 fn write_json<T: Serialize>(path: &Path, value: &T) -> Result<(), String> {
@@ -229,6 +245,7 @@ pub fn load_launcher_config_internal(
     match serde_json::from_str::<LauncherConfig>(&contents) {
         Ok(mut config) if config.items.len() > MAX_MENU_ITEMS_PER_LEVEL => {
             config.items.truncate(MAX_MENU_ITEMS_PER_LEVEL);
+            normalize_launcher_config(&mut config)?;
             validate_launcher_config(&config)?;
             Ok(LauncherConfigResponse {
                 config,
@@ -238,22 +255,25 @@ pub fn load_launcher_config_internal(
                 )),
             })
         }
-        Ok(config) => match validate_launcher_config(&config) {
-            Ok(()) => Ok(LauncherConfigResponse {
-                config,
-                warning: None,
-            }),
-            Err(error) => {
-                let config = empty_launcher_config();
-                write_json(&path, &config)?;
-                Ok(LauncherConfigResponse {
+        Ok(mut config) => {
+            normalize_launcher_config(&mut config)?;
+            match validate_launcher_config(&config) {
+                Ok(()) => Ok(LauncherConfigResponse {
                     config,
-                    warning: Some(format!(
+                    warning: None,
+                }),
+                Err(error) => {
+                    let config = empty_launcher_config();
+                    write_json(&path, &config)?;
+                    Ok(LauncherConfigResponse {
+                        config,
+                        warning: Some(format!(
                         "O arquivo salvo estava inválido e uma configuração vazia foi carregada: {error}"
-                    )),
-                })
+                        )),
+                    })
+                }
             }
-        },
+        }
         Err(error) => {
             let config = empty_launcher_config();
             write_json(&path, &config)?;
@@ -306,7 +326,7 @@ pub fn load_launcher_config(app: tauri::AppHandle) -> Result<LauncherConfigRespo
 #[tauri::command]
 pub fn save_launcher_config(app: tauri::AppHandle, config: LauncherConfig) -> Result<(), String> {
     let mut config = config;
-    normalize_action_urls(&mut config.items)?;
+    normalize_launcher_config(&mut config)?;
     validate_launcher_config(&config)?;
     write_json(&launcher_config_path(&app)?, &config)?;
     app.emit(CONFIG_UPDATED_EVENT, config).map_err(|error| {

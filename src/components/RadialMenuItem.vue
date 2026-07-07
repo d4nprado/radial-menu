@@ -8,6 +8,7 @@ const props = defineProps<{
   index: number
   total: number
   disabled?: boolean
+  menuSize?: number
 }>()
 
 defineEmits<{
@@ -16,7 +17,8 @@ defineEmits<{
 
 const position = computed(() => {
   const angle = (props.index / props.total) * Math.PI * 2 - Math.PI / 2
-  const radius = 210
+  const sizeRatio = Math.min(100, Math.max(0, props.menuSize ?? 0)) / 100
+  const radius = 160 + sizeRatio * 50
   const y = Math.sin(angle) * radius
 
   return {

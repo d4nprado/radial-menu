@@ -12,7 +12,7 @@ import type {
   PreferencesLoadResponse,
 } from './types/menu'
 
-const menuConfig = ref<MenuConfig>({ shortcut: 'Ctrl+Space', items: [] })
+const menuConfig = ref<MenuConfig>({ shortcut: 'Ctrl+Space', radialMenuSize: 0, items: [] })
 const phase = ref<'entering' | 'visible' | 'leaving'>('entering')
 const navigationStack = ref<MenuItem[]>([])
 const currentGroup = computed(() => navigationStack.value.at(-1) ?? null)
@@ -141,6 +141,7 @@ onBeforeUnmount(() => {
       :disabled="isExecuting"
       :center-action="centerAction"
       :level-key="currentGroup?.id ?? 'main'"
+      :menu-size="menuConfig.radialMenuSize"
       @select="selectItem"
       @dismiss="dismiss"
       @center-action="handleCenterAction"

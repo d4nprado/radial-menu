@@ -56,6 +56,7 @@ export type MenuItem = {
 
 export type MenuConfig = {
   shortcut: string
+  radialMenuSize: number
   items: MenuItem[]
 }
 

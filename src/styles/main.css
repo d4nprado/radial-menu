@@ -59,7 +59,7 @@ button {
 
 .radial-menu::before {
   position: absolute;
-  inset: 34px;
+  inset: var(--menu-backdrop-inset, 78px);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 50%;
   background:
@@ -84,8 +84,8 @@ button {
 }
 
 .radial-menu__orbit--outer {
-  width: 424px;
-  height: 424px;
+  width: var(--menu-outer-size, 374px);
+  height: var(--menu-outer-size, 374px);
   border-style: dashed;
   animation: orbit-spin 36s linear infinite;
 }
@@ -105,13 +105,13 @@ button {
   top: 50%;
   left: 50%;
   display: flex;
-  width: 106px;
-  height: 106px;
+  width: var(--menu-item-size, 84px);
+  height: var(--menu-item-size, 84px);
   padding: 0;
   align-items: center;
   justify-content: center;
   border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 29px;
+  border-radius: var(--menu-item-radius, 23px);
   outline: none;
   color: #fff;
   background: linear-gradient(145deg, rgba(32, 37, 55, 0.94), rgba(12, 15, 27, 0.92));
@@ -158,8 +158,8 @@ button {
 
 .radial-item__glow {
   position: absolute;
-  inset: 8px;
-  border-radius: 23px;
+  inset: var(--menu-item-glow-inset, 7px);
+  border-radius: var(--menu-item-glow-radius, 19px);
   background: radial-gradient(circle at 35% 25%, color-mix(in srgb, var(--accent) 25%, transparent), transparent 62%);
   opacity: 0.75;
   pointer-events: none;
@@ -168,11 +168,11 @@ button {
 .radial-item__icon {
   position: relative;
   display: grid;
-  width: 50px;
-  height: 50px;
+  width: var(--menu-icon-size, 42px);
+  height: var(--menu-icon-size, 42px);
   place-items: center;
   border: 1px solid color-mix(in srgb, var(--accent) 46%, transparent);
-  border-radius: 17px;
+  border-radius: var(--menu-icon-radius, 14px);
   color: color-mix(in srgb, var(--accent) 68%, white);
   background: color-mix(in srgb, var(--accent) 11%, rgba(8, 11, 20, 0.75));
   font-size: 16px;
