@@ -20,6 +20,7 @@ export type FixedIconKind =
   | 'source-hidden'
   | 'camera'
   | 'camera-off'
+  | 'app'
   | 'group'
 
 export type ProgramIconPayload = {
@@ -29,6 +30,7 @@ export type ProgramIconPayload = {
 }
 
 const programIconCache = new Map<string, Promise<ProgramIconPayload | null>>()
+const windowsAppIconCache = new Map<string, Promise<ProgramIconPayload | null>>()
 
 const systemIcons: Record<SystemActionTarget, FixedIconKind> = {
   explorer: 'folder',
@@ -41,6 +43,7 @@ const systemIcons: Record<SystemActionTarget, FixedIconKind> = {
 export function fixedIconForItem(item: MenuItem): FixedIconKind | null {
   if (item.action.type === 'directory') return 'folder'
   if (item.action.type === 'url') return 'globe'
+  if (item.action.type === 'windows_app') return 'app'
   if (item.action.type === 'system') return systemIcons[item.action.target]
   if (item.action.type === 'stream') return streamBaseIcon(item.action)
   if (item.action.type === 'group') return 'group'
@@ -128,6 +131,20 @@ export function resolveProgramIcon(path: string) {
     .then((payload) => isValidPayload(payload) ? payload : null)
     .catch(() => null)
   programIconCache.set(cacheKey, pending)
+  return pending
+}
+
+export function resolveWindowsAppIcon(appUserModelId: string) {
+  const cacheKey = appUserModelId.trim().toLowerCase()
+  if (!cacheKey) return Promise.resolve(null)
+
+  const cached = windowsAppIconCache.get(cacheKey)
+  if (cached) return cached
+
+  const pending = invoke<ProgramIconPayload | null>('get_windows_app_icon', { appUserModelId })
+    .then((payload) => isValidPayload(payload) ? payload : null)
+    .catch(() => null)
+  windowsAppIconCache.set(cacheKey, pending)
   return pending
 }
 

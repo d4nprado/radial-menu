@@ -21,6 +21,7 @@ const emit = defineEmits<{
 
 const actionLabels: Record<Exclude<MenuAction['type'], 'group'>, string> = {
   program: 'Programa',
+  windows_app: 'Aplicativo do Windows',
   directory: 'Diretório',
   url: 'URL',
   system: 'Sistema',
@@ -57,6 +58,9 @@ function itemSubtitle(item: MenuItem) {
   }
   if (action.type === 'program' || action.type === 'directory') {
     return `${actionLabels[action.type]} · ${action.path}`
+  }
+  if (action.type === 'windows_app') {
+    return `${actionLabels.windows_app} · ${action.label || action.appUserModelId}`
   }
   if (action.type === 'url') return `${actionLabels.url} · ${action.url}`
   if (action.type === 'stream') {

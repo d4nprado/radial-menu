@@ -56,6 +56,11 @@ type StreamActionOption = {
   label: string
 }
 
+type WindowsAppOption = {
+  name: string
+  appUserModelId: string
+}
+
 const streamActionOptions: Record<StreamControl, StreamActionOption[]> = {
   scene: [
     { key: 'set_scene', label: 'Trocar cena' },
@@ -126,7 +131,11 @@ const form = reactive<FormState>({
 const obsScenes = ref<string[]>([])
 const obsInputs = ref<string[]>([])
 const obsSources = ref<string[]>([])
+const windowsApps = ref<WindowsAppOption[]>([])
+const windowsAppSearch = ref('')
+const windowsAppStatus = ref('')
 const streamStatus = ref('')
+const isLoadingWindowsApps = ref(false)
 const isLoadingScenes = ref(false)
 const isLoadingInputs = ref(false)
 const isLoadingSources = ref(false)
@@ -169,6 +178,33 @@ const savedStreamSourceMissing = computed(() =>
   && Boolean(form.streamSourceName.trim())
   && !obsSources.value.includes(form.streamSourceName),
 )
+const filteredWindowsApps = computed(() => {
+  const query = normalizeSearch(windowsAppSearch.value)
+  const apps = query
+    ? windowsApps.value.filter((app) =>
+      normalizeSearch(`${app.name} ${app.appUserModelId}`).includes(query),
+    )
+    : windowsApps.value
+
+  if (
+    form.actionType === 'windows_app'
+    && form.value.trim()
+    && !apps.some((app) => app.appUserModelId === form.value)
+  ) {
+    return [
+      {
+        name: getWindowsAppLabelFromAction(props.item?.action) || form.value,
+        appUserModelId: form.value,
+      },
+      ...apps,
+    ]
+  }
+
+  return apps
+})
+const selectedWindowsApp = computed(() =>
+  windowsApps.value.find((app) => app.appUserModelId === form.value),
+)
 
 watch(
   () => props.item,
@@ -189,6 +225,8 @@ watch(
     form.streamSceneName = item?.action.type === 'stream' ? item.action.sceneName ?? '' : ''
     form.streamInputName = item?.action.type === 'stream' ? item.action.inputName ?? '' : ''
     form.streamSourceName = item?.action.type === 'stream' ? item.action.sourceName ?? '' : ''
+    windowsAppSearch.value = ''
+    windowsAppStatus.value = ''
     streamStatus.value = ''
   },
   { immediate: true },
@@ -197,7 +235,20 @@ watch(
 function getActionValue(action?: MenuAction) {
   if (!action || action.type === 'system' || action.type === 'group') return ''
   if (action.type === 'stream') return ''
+  if (action.type === 'windows_app') return action.appUserModelId
   return action.type === 'url' ? action.url : action.path
+}
+
+function getWindowsAppLabelFromAction(action?: MenuAction) {
+  return action?.type === 'windows_app' ? action.label ?? '' : ''
+}
+
+function normalizeSearch(value: string) {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
 }
 
 function handleStreamSceneChange() {
@@ -208,6 +259,13 @@ function handleStreamSceneChange() {
 function selectStreamControl(control: StreamControl) {
   form.streamControl = control
   form.streamActionKey = defaultStreamActionKeys[control]
+  streamStatus.value = ''
+}
+
+function handleActionTypeChange() {
+  form.value = ''
+  windowsAppSearch.value = ''
+  windowsAppStatus.value = ''
   streamStatus.value = ''
 }
 
@@ -253,7 +311,7 @@ async function selectProgram() {
   const selected = await open({
     multiple: false,
     directory: false,
-    filters: [{ name: 'Programas', extensions: ['exe', 'com', 'bat', 'cmd'] }],
+    filters: [{ name: 'Aplicativos', extensions: ['exe', 'lnk', 'bat', 'cmd'] }],
   })
   if (typeof selected === 'string') form.value = selected
 }
@@ -261,6 +319,43 @@ async function selectProgram() {
 async function selectDirectory() {
   const selected = await open({ multiple: false, directory: true })
   if (typeof selected === 'string') form.value = selected
+}
+
+async function loadWindowsApps() {
+  isLoadingWindowsApps.value = true
+  windowsAppStatus.value = ''
+  try {
+    windowsApps.value = await invoke<WindowsAppOption[]>('list_windows_apps')
+    if (!windowsApps.value.length) {
+      windowsAppStatus.value = 'Nenhum aplicativo retornado pelo Windows.'
+      return
+    }
+    windowsAppStatus.value = 'Aplicativos carregados.'
+  } catch (cause) {
+    windowsAppStatus.value = typeof cause === 'string'
+      ? cause
+      : 'Não foi possível listar os aplicativos instalados.'
+  } finally {
+    isLoadingWindowsApps.value = false
+  }
+}
+
+function handleWindowsAppChange() {
+  const app = selectedWindowsApp.value
+  if (!app) return
+
+  if (!form.label.trim()) form.label = app.name
+  if (!form.hint.trim()) form.hint = 'Aplicativo do Windows'
+  if (!form.icon.trim()) {
+    form.icon = app.name
+      .trim()
+      .split(/\s+/)
+      .slice(0, 2)
+      .map((part) => part[0] ?? '')
+      .join('')
+      .toUpperCase()
+      .slice(0, 3)
+  }
 }
 
 async function loadObsScenes() {
@@ -338,6 +433,13 @@ function buildAction(): MenuAction {
     return { type: 'group', items }
   }
   if (form.actionType === 'program') return { type: 'program', path: form.value.trim() }
+  if (form.actionType === 'windows_app') {
+    return {
+      type: 'windows_app',
+      appUserModelId: form.value.trim(),
+      label: selectedWindowsApp.value?.name ?? getWindowsAppLabelFromAction(props.item?.action),
+    }
+  }
   if (form.actionType === 'directory') return { type: 'directory', path: form.value.trim() }
   if (form.actionType === 'url') {
     const value = form.value.trim()
@@ -484,8 +586,9 @@ function submit() {
 
         <label v-if="!isGroup" class="item-modal__wide">
           <span>Tipo de ação</span>
-          <select v-model="form.actionType">
+          <select v-model="form.actionType" @change="handleActionTypeChange">
             <option value="program">Abrir programa</option>
+            <option value="windows_app">Aplicativo do Windows</option>
             <option value="directory">Abrir diretório</option>
             <option value="url">Abrir URL</option>
             <option value="system">Ação padrão do sistema</option>
@@ -502,6 +605,51 @@ function submit() {
             <option value="notepad">Bloco de notas</option>
           </select>
         </label>
+
+        <div
+          v-else-if="!isGroup && form.actionType === 'windows_app'"
+          class="item-modal__wide windows-app-fields"
+        >
+          <label class="windows-app-fields__wide">
+            <span>Aplicativo</span>
+            <span class="path-field">
+              <button
+                type="button"
+                :disabled="isLoadingWindowsApps"
+                @click="loadWindowsApps"
+              >
+                {{ isLoadingWindowsApps ? 'Carregando...' : 'Carregar aplicativos' }}
+              </button>
+            </span>
+          </label>
+
+          <label class="windows-app-fields__wide">
+            <span>Buscar</span>
+            <input
+              v-model="windowsAppSearch"
+              type="search"
+              placeholder="Ex.: Spotify, WhatsApp"
+            >
+          </label>
+
+          <label class="windows-app-fields__wide">
+            <span>Aplicativos instalados</span>
+            <select v-model="form.value" required @change="handleWindowsAppChange">
+              <option value="" disabled>Selecione um aplicativo</option>
+              <option
+                v-for="app in filteredWindowsApps"
+                :key="app.appUserModelId"
+                :value="app.appUserModelId"
+              >
+                {{ app.name }}
+              </option>
+            </select>
+          </label>
+
+          <p v-if="windowsAppStatus" class="stream-fields__status">
+            {{ windowsAppStatus }}
+          </p>
+        </div>
 
         <div v-else-if="!isGroup && form.actionType === 'stream'" class="item-modal__wide stream-fields">
           <label>
@@ -656,7 +804,7 @@ function submit() {
               type="button"
               @click="selectProgram"
             >
-              Selecionar programa
+              Selecionar aplicativo
             </button>
             <button
               v-if="form.actionType === 'directory'"
@@ -666,6 +814,9 @@ function submit() {
               Selecionar pasta
             </button>
           </span>
+          <small v-if="form.actionType === 'program'" class="path-field__hint">
+            Aceita .exe, .lnk, .bat e .cmd
+          </small>
         </label>
       </div>
 
@@ -850,6 +1001,16 @@ label > span:first-child {
   gap: 14px;
 }
 
+.windows-app-fields {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+}
+
+.windows-app-fields__wide {
+  grid-column: 1 / -1;
+}
+
 .stream-control-field {
   display: flex;
   flex-direction: column;
@@ -977,6 +1138,11 @@ input[type="color"] {
   color: #bcb6ff;
   background: rgb(139 124 255 / 9%);
   cursor: pointer;
+}
+
+.path-field__hint {
+  color: #696e82;
+  font-size: 8px;
 }
 
 footer {

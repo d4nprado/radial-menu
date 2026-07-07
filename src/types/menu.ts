@@ -13,6 +13,12 @@ export type UrlAction = {
   url: string
 }
 
+export type WindowsAppAction = {
+  type: 'windows_app'
+  appUserModelId: string
+  label?: string
+}
+
 export type SystemActionTarget =
   | 'explorer'
   | 'default_browser'
@@ -58,6 +64,7 @@ export type MenuAction =
   | ProgramAction
   | DirectoryAction
   | UrlAction
+  | WindowsAppAction
   | SystemAction
   | StreamAction
   | GroupAction

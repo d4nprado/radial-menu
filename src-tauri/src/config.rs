@@ -61,6 +61,13 @@ pub enum LauncherAction {
         #[serde(alias = "value", alias = "path")]
         url: String,
     },
+    #[serde(rename = "windows_app")]
+    WindowsApp {
+        #[serde(rename = "appUserModelId")]
+        app_user_model_id: String,
+        #[serde(default)]
+        label: String,
+    },
     System {
         target: SystemActionTarget,
     },
@@ -232,6 +239,15 @@ fn validate_menu_items(
                 muted: *muted,
                 visible: *visible,
             })?;
+        }
+
+        if let LauncherAction::WindowsApp {
+            app_user_model_id, ..
+        } = &item.action
+        {
+            if app_user_model_id.trim().is_empty() {
+                return Err("Cada aplicativo do Windows precisa ter um identificador.".into());
+            }
         }
 
         if let LauncherAction::Group { items } = &item.action {

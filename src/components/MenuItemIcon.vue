@@ -4,6 +4,7 @@ import {
   fallbackTextForItem,
   fixedIconForItem,
   resolveProgramIcon,
+  resolveWindowsAppIcon,
   type FixedIconKind,
   type ProgramIconPayload,
 } from '../composables/useResolvedMenuIcon'
@@ -20,16 +21,30 @@ const fixedIcon = computed(() => props.fixedIconOverride ?? fixedIconForItem(pro
 const fallbackText = computed(() => fallbackTextForItem(props.item))
 
 watch(
-  () => props.item.action.type === 'program' ? props.item.action.path : null,
-  async (path) => {
+  () => {
+    if (props.item.action.type === 'program') {
+      return { type: 'program' as const, value: props.item.action.path }
+    }
+    if (props.item.action.type === 'windows_app') {
+      return { type: 'windows_app' as const, value: props.item.action.appUserModelId }
+    }
+    return null
+  },
+  async (target) => {
     programIcon.value = null
-    if (!path) return
+    if (!target?.value) return
 
-    const requestedPath = path
-    const resolved = await resolveProgramIcon(requestedPath)
+    const requested = target
+    const resolved = target.type === 'program'
+      ? await resolveProgramIcon(target.value)
+      : await resolveWindowsAppIcon(target.value)
     if (
-      props.item.action.type === 'program'
-      && props.item.action.path === requestedPath
+      (requested.type === 'program'
+        && props.item.action.type === 'program'
+        && props.item.action.path === requested.value)
+      || (requested.type === 'windows_app'
+        && props.item.action.type === 'windows_app'
+        && props.item.action.appUserModelId === requested.value)
     ) {
       programIcon.value = resolved
     }

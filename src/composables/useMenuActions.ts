@@ -11,6 +11,8 @@ const executors: {
 } = {
   program: (action) =>
     invoke('open_program', { path: action.path }),
+  windows_app: (action) =>
+    invoke('execute_windows_app', { appUserModelId: action.appUserModelId }),
   directory: (action) =>
     invoke('open_directory', { path: action.path }),
   url: (action) =>
