@@ -16,6 +16,7 @@ function cloneItems(items: MenuItem[]) {
 }
 
 const shortcut = ref('Ctrl+Space')
+const radialMenuSize = ref(0)
 const items = ref<MenuItem[]>([])
 const currentGroupId = ref<string | null>(null)
 const currentGroup = computed(() => {
@@ -46,6 +47,7 @@ async function loadConfig() {
   try {
     const response = await invoke<ConfigLoadResponse>('load_launcher_config')
     shortcut.value = response.config.shortcut
+    radialMenuSize.value = response.config.radialMenuSize ?? 0
     items.value = cloneItems(response.config.items)
     currentGroupId.value = null
     selectedId.value = items.value[0]?.id ?? null
@@ -182,11 +184,20 @@ function closeGroup() {
   selectedId.value = groupId
 }
 
+function updateRadialMenuSize(size: number) {
+  radialMenuSize.value = size
+  setStatus('Alterações ainda não salvas')
+}
+
 async function saveConfig() {
   busy.value = true
   try {
     await invoke('save_launcher_config', {
-      config: { shortcut: shortcut.value, items: items.value },
+      config: {
+        shortcut: shortcut.value,
+        radialMenuSize: radialMenuSize.value,
+        items: items.value,
+      },
     })
     setStatus('Configuração salva', 'success')
   } catch (cause) {
@@ -229,11 +240,13 @@ onMounted(loadConfig)
         :selected-id="selectedId"
         :max-items="MAX_MENU_ITEMS_PER_LEVEL"
         :group-label="currentGroup?.label ?? null"
+        :menu-size="radialMenuSize"
         @select="selectItem"
         @add="openAddForm"
         @reorder="reorderItems"
         @open-group="openGroup"
         @back="closeGroup"
+        @update:menu-size="updateRadialMenuSize"
       />
       <MenuItemsPanel
         :items="currentItems"

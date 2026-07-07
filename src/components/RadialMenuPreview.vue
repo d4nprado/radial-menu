@@ -8,6 +8,7 @@ const props = defineProps<{
   selectedId: string | null
   maxItems: number
   groupLabel: string | null
+  menuSize: number
 }>()
 
 const emit = defineEmits<{
@@ -16,6 +17,7 @@ const emit = defineEmits<{
   reorder: [fromIndex: number, toIndex: number]
   openGroup: [id: string]
   back: []
+  'update:menuSize': [size: number]
 }>()
 
 const ring = ref<HTMLElement | null>(null)
@@ -28,18 +30,37 @@ const selectedItem = computed(() =>
   props.items.find((item) => item.id === props.selectedId),
 )
 
+const sizeRatio = computed(() => Math.min(100, Math.max(0, props.menuSize)) / 100)
+const previewRadius = computed(() => 118 + sizeRatio.value * 62)
+const previewOuterSize = computed(() => previewRadius.value * 2 + 36)
+const previewButtonSize = computed(() => 46 + sizeRatio.value * 18)
+const previewIconSize = computed(() => 28 + sizeRatio.value * 10)
+const ringStyle = computed(() => ({
+  '--preview-outer-size': `${previewOuterSize.value}px`,
+  '--preview-item-size': `${previewButtonSize.value}px`,
+  '--preview-item-radius': `${14 + sizeRatio.value * 6}px`,
+  '--preview-icon-size': `${previewIconSize.value}px`,
+  '--preview-icon-radius': `${9 + sizeRatio.value * 5}px`,
+}))
+
 function itemPosition(index: number) {
   const positionIndex = props.items[index]?.id === draggingId.value
     ? (dragTargetIndex.value ?? index)
     : index
   const angle = (positionIndex / props.items.length) * Math.PI * 2 - Math.PI / 2
-  const radius = 150
+  const radius = previewRadius.value
 
   return {
     '--preview-x': `${Math.cos(angle) * radius}px`,
     '--preview-y': `${Math.sin(angle) * radius}px`,
     '--preview-accent': props.items[index]?.accent ?? '#8b7cff',
   }
+}
+
+function updateMenuSize(event: Event) {
+  const target = event.target
+  if (!(target instanceof HTMLInputElement)) return
+  emit('update:menuSize', Number(target.value))
 }
 
 function indexFromPointer(event: PointerEvent) {
@@ -128,7 +149,7 @@ function activateItem(item: MenuItem) {
       <small>{{ items.length }} {{ items.length === 1 ? 'item' : 'itens' }}</small>
     </div>
 
-    <div ref="ring" class="preview-ring">
+    <div ref="ring" class="preview-ring" :style="ringStyle">
       <div class="preview-ring__orbit preview-ring__orbit--outer" />
       <div class="preview-ring__orbit preview-ring__orbit--inner" />
 
@@ -171,6 +192,22 @@ function activateItem(item: MenuItem) {
         </span>
       </button>
     </div>
+
+    <label class="preview-size-control">
+      <span>
+        <strong>Tamanho do menu</strong>
+        <small>{{ menuSize }}%</small>
+      </span>
+      <input
+        type="range"
+        min="0"
+        max="100"
+        step="1"
+        :value="menuSize"
+        aria-label="Tamanho do menu radial"
+        @input="updateMenuSize"
+      >
+    </label>
 
     <div class="preview-card__selection">
       <div>
@@ -256,8 +293,8 @@ h2 {
 }
 
 .preview-ring__orbit--outer {
-  width: 336px;
-  height: 336px;
+  width: var(--preview-outer-size, 272px);
+  height: var(--preview-outer-size, 272px);
   border-style: dashed;
 }
 
@@ -276,12 +313,12 @@ h2 {
   top: 50%;
   left: 50%;
   display: grid;
-  width: 62px;
-  height: 62px;
+  width: var(--preview-item-size, 54px);
+  height: var(--preview-item-size, 54px);
   padding: 0;
   place-items: center;
   border: 1px solid color-mix(in srgb, var(--preview-accent) 34%, rgb(255 255 255 / 8%));
-  border-radius: 19px;
+  border-radius: var(--preview-item-radius, 16px);
   color: color-mix(in srgb, var(--preview-accent) 64%, white);
   background: linear-gradient(145deg, rgb(37 41 61 / 96%), rgb(15 18 31 / 98%));
   box-shadow: 0 10px 24px rgb(0 0 0 / 28%);
@@ -300,10 +337,10 @@ h2 {
 
 .preview-item span {
   display: grid;
-  width: 36px;
-  height: 36px;
+  width: var(--preview-icon-size, 32px);
+  height: var(--preview-icon-size, 32px);
   place-items: center;
-  border-radius: 12px;
+  border-radius: var(--preview-icon-radius, 10px);
   background: color-mix(in srgb, var(--preview-accent) 12%, transparent);
   font-size: 13px;
   font-weight: 700;
@@ -367,6 +404,41 @@ h2 {
   font-size: 10px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.preview-size-control {
+  display: flex;
+  margin: 0 0 16px;
+  align-items: center;
+  gap: 16px;
+}
+
+.preview-size-control span {
+  display: flex;
+  width: 132px;
+  flex: 0 0 auto;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.preview-size-control strong {
+  color: #d8d5ff;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.preview-size-control small {
+  color: #8c91a8;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.preview-size-control input {
+  width: 100%;
+  height: 16px;
+  accent-color: #8b7cff;
+  cursor: pointer;
 }
 
 .preview-card__selection {
