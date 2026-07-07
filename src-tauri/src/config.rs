@@ -66,8 +66,16 @@ pub enum LauncherAction {
     Stream {
         provider: crate::stream::StreamProvider,
         operation: crate::stream::StreamOperation,
-        #[serde(rename = "sceneName")]
+        #[serde(default, rename = "sceneName")]
         scene_name: String,
+        #[serde(default, rename = "inputName")]
+        input_name: String,
+        #[serde(default, rename = "sourceName")]
+        source_name: String,
+        #[serde(default)]
+        muted: Option<bool>,
+        #[serde(default)]
+        visible: Option<bool>,
     },
     Group {
         items: Vec<LauncherMenuItem>,
@@ -208,12 +216,20 @@ fn validate_menu_items(
             provider,
             operation,
             scene_name,
+            input_name,
+            source_name,
+            muted,
+            visible,
         } = &item.action
         {
             crate::stream::validate_stream_action(&crate::stream::StreamAction {
                 provider: provider.clone(),
                 operation: operation.clone(),
                 scene_name: scene_name.clone(),
+                input_name: input_name.clone(),
+                source_name: source_name.clone(),
+                muted: *muted,
+                visible: *visible,
             })?;
         }
 

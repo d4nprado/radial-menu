@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { invoke } from '@tauri-apps/api/core'
 import { computed, onMounted, ref, toRaw } from 'vue'
+import { useObsStreamStatus } from '../composables/useObsStreamStatus'
 import {
   MAX_MENU_ITEMS_PER_LEVEL,
   type ConfigLoadResponse,
@@ -36,10 +37,38 @@ const showPreferences = ref(false)
 const busy = ref(true)
 const status = ref('Carregando configuração…')
 const statusKind = ref<'neutral' | 'success' | 'error'>('neutral')
+const {
+  status: obsStreamStatus,
+  refresh: refreshObsStreamStatus,
+} = useObsStreamStatus()
 
 function setStatus(message: string, kind: 'neutral' | 'success' | 'error' = 'neutral') {
   status.value = message
   statusKind.value = kind
+}
+
+function hasStreamToggle(menuItems: MenuItem[]): boolean {
+  return menuItems.some((item) => {
+    if (item.action.type === 'group') return hasStreamToggle(item.action.items)
+    return item.action.type === 'stream'
+      && (item.action.operation === 'toggle_recording'
+        || item.action.operation === 'toggle_streaming'
+        || item.action.operation === 'toggle_input_mute')
+  })
+}
+
+function obsToggleInputNames(menuItems: MenuItem[]): string[] {
+  return menuItems.flatMap((item) => {
+    if (item.action.type === 'group') return obsToggleInputNames(item.action.items)
+    if (
+      item.action.type === 'stream'
+      && item.action.operation === 'toggle_input_mute'
+      && item.action.inputName?.trim()
+    ) {
+      return [item.action.inputName.trim()]
+    }
+    return []
+  })
 }
 
 async function loadConfig() {
@@ -51,6 +80,7 @@ async function loadConfig() {
     items.value = cloneItems(response.config.items)
     currentGroupId.value = null
     selectedId.value = items.value[0]?.id ?? null
+    if (hasStreamToggle(items.value)) void refreshObsStreamStatus(obsToggleInputNames(items.value))
     setStatus(response.warning ?? 'Configuração carregada', response.warning ? 'error' : 'neutral')
   } catch (cause) {
     items.value = []
@@ -241,6 +271,7 @@ onMounted(loadConfig)
         :max-items="MAX_MENU_ITEMS_PER_LEVEL"
         :group-label="currentGroup?.label ?? null"
         :menu-size="radialMenuSize"
+        :obs-stream-status="obsStreamStatus"
         @select="selectItem"
         @add="openAddForm"
         @reorder="reorderItems"

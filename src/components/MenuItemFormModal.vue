@@ -20,6 +20,74 @@ const emit = defineEmits<{
 
 type ActionType = Exclude<MenuAction['type'], 'group'>
 type ItemKind = 'action' | 'group'
+type StreamControl = 'scene' | 'recording' | 'streaming' | 'audio' | 'source'
+type StreamActionKey =
+  | 'set_scene'
+  | 'start_recording'
+  | 'stop_recording'
+  | 'toggle_recording'
+  | 'start_streaming'
+  | 'stop_streaming'
+  | 'toggle_streaming'
+  | 'mute_input'
+  | 'unmute_input'
+  | 'toggle_input_mute'
+  | 'show_source'
+  | 'hide_source'
+  | 'toggle_source_visibility'
+
+type StreamControlOption = {
+  key: StreamControl
+  label: string
+  description: string
+}
+
+const streamControls: StreamControlOption[] = [
+  { key: 'scene', label: 'Cena', description: 'Trocar cena do OBS' },
+  { key: 'recording', label: 'Gravação', description: 'Iniciar/parar gravação' },
+  { key: 'streaming', label: 'Transmissão', description: 'Iniciar/parar live' },
+  { key: 'audio', label: 'Áudio', description: 'Mutar/desmutar input' },
+  { key: 'source', label: 'Fonte', description: 'Mostrar/ocultar fonte' },
+]
+
+type StreamActionOption = {
+  key: StreamActionKey
+  label: string
+}
+
+const streamActionOptions: Record<StreamControl, StreamActionOption[]> = {
+  scene: [
+    { key: 'set_scene', label: 'Trocar cena' },
+  ],
+  recording: [
+    { key: 'start_recording', label: 'Iniciar gravação' },
+    { key: 'stop_recording', label: 'Parar gravação' },
+    { key: 'toggle_recording', label: 'Alternar gravação' },
+  ],
+  streaming: [
+    { key: 'start_streaming', label: 'Iniciar transmissão' },
+    { key: 'stop_streaming', label: 'Parar transmissão' },
+    { key: 'toggle_streaming', label: 'Alternar transmissão' },
+  ],
+  audio: [
+    { key: 'mute_input', label: 'Mutar input de áudio' },
+    { key: 'unmute_input', label: 'Desmutar input de áudio' },
+    { key: 'toggle_input_mute', label: 'Alternar mute de input de áudio' },
+  ],
+  source: [
+    { key: 'show_source', label: 'Mostrar fonte' },
+    { key: 'hide_source', label: 'Ocultar fonte' },
+    { key: 'toggle_source_visibility', label: 'Alternar visibilidade de fonte' },
+  ],
+}
+
+const defaultStreamActionKeys: Record<StreamControl, StreamActionKey> = {
+  scene: 'set_scene',
+  recording: 'toggle_recording',
+  streaming: 'toggle_streaming',
+  audio: 'toggle_input_mute',
+  source: 'toggle_source_visibility',
+}
 
 type FormState = {
   id: string
@@ -31,6 +99,11 @@ type FormState = {
   actionType: ActionType
   value: string
   systemTarget: SystemActionTarget
+  streamControl: StreamControl
+  streamActionKey: StreamActionKey
+  streamSceneName: string
+  streamInputName: string
+  streamSourceName: string
 }
 
 const form = reactive<FormState>({
@@ -43,26 +116,57 @@ const form = reactive<FormState>({
   actionType: 'program',
   value: '',
   systemTarget: 'explorer',
+  streamControl: 'scene',
+  streamActionKey: 'set_scene',
+  streamSceneName: '',
+  streamInputName: '',
+  streamSourceName: '',
 })
 const obsScenes = ref<string[]>([])
+const obsInputs = ref<string[]>([])
+const obsSources = ref<string[]>([])
 const streamStatus = ref('')
 const isLoadingScenes = ref(false)
+const isLoadingInputs = ref(false)
+const isLoadingSources = ref(false)
 
 const isEditing = computed(() => Boolean(props.item))
 const isGroup = computed(() => form.itemKind === 'group')
+const needsStreamScene = computed(() =>
+  form.streamControl === 'scene' || form.streamControl === 'source',
+)
+const needsStreamInput = computed(() => form.streamControl === 'audio')
+const needsStreamSource = computed(() => form.streamControl === 'source')
+const currentStreamActionOptions = computed(() => streamActionOptions[form.streamControl])
+const streamFieldsValid = computed(() =>
+  (!needsStreamScene.value || form.streamSceneName.trim())
+  && (!needsStreamInput.value || form.streamInputName.trim())
+  && (!needsStreamSource.value || form.streamSourceName.trim()),
+)
 const requiresValue = computed(() =>
-  !isGroup.value && form.actionType !== 'system',
+  !isGroup.value && form.actionType !== 'system' && form.actionType !== 'stream',
 )
 const canSave = computed(() =>
   form.label.trim()
   && form.hint.trim()
   && form.icon.trim()
-  && (!requiresValue.value || form.value.trim()),
+  && (!requiresValue.value || form.value.trim())
+  && (form.actionType !== 'stream' || streamFieldsValid.value),
 )
 const savedStreamSceneMissing = computed(() =>
   form.actionType === 'stream'
-  && Boolean(form.value.trim())
-  && !obsScenes.value.includes(form.value),
+  && Boolean(form.streamSceneName.trim())
+  && !obsScenes.value.includes(form.streamSceneName),
+)
+const savedStreamInputMissing = computed(() =>
+  form.actionType === 'stream'
+  && Boolean(form.streamInputName.trim())
+  && !obsInputs.value.includes(form.streamInputName),
+)
+const savedStreamSourceMissing = computed(() =>
+  form.actionType === 'stream'
+  && Boolean(form.streamSourceName.trim())
+  && !obsSources.value.includes(form.streamSourceName),
 )
 
 watch(
@@ -79,14 +183,69 @@ watch(
       : 'program'
     form.systemTarget = item?.action.type === 'system' ? item.action.target : 'explorer'
     form.value = getActionValue(item?.action)
+    form.streamControl = getStreamControl(item?.action)
+    form.streamActionKey = getStreamActionKey(item?.action)
+    form.streamSceneName = item?.action.type === 'stream' ? item.action.sceneName ?? '' : ''
+    form.streamInputName = item?.action.type === 'stream' ? item.action.inputName ?? '' : ''
+    form.streamSourceName = item?.action.type === 'stream' ? item.action.sourceName ?? '' : ''
+    streamStatus.value = ''
   },
   { immediate: true },
 )
 
 function getActionValue(action?: MenuAction) {
   if (!action || action.type === 'system' || action.type === 'group') return ''
-  if (action.type === 'stream') return action.sceneName
+  if (action.type === 'stream') return ''
   return action.type === 'url' ? action.url : action.path
+}
+
+function handleStreamSceneChange() {
+  obsSources.value = []
+  form.streamSourceName = ''
+}
+
+function selectStreamControl(control: StreamControl) {
+  form.streamControl = control
+  form.streamActionKey = defaultStreamActionKeys[control]
+  streamStatus.value = ''
+}
+
+function getStreamControl(action?: MenuAction): StreamControl {
+  if (!action || action.type !== 'stream') return 'scene'
+  if (action.operation === 'set_scene') return 'scene'
+  if (
+    action.operation === 'toggle_recording'
+    || action.operation === 'start_recording'
+    || action.operation === 'stop_recording'
+  ) return 'recording'
+  if (
+    action.operation === 'toggle_streaming'
+    || action.operation === 'start_streaming'
+    || action.operation === 'stop_streaming'
+  ) return 'streaming'
+  if (action.operation === 'toggle_input_mute' || action.operation === 'set_input_mute') {
+    return 'audio'
+  }
+  return 'source'
+}
+
+function getStreamActionKey(action?: MenuAction): StreamActionKey {
+  if (!action || action.type !== 'stream') return 'set_scene'
+  if (action.operation === 'set_scene') return 'set_scene'
+  if (action.operation === 'start_recording') return 'start_recording'
+  if (action.operation === 'stop_recording') return 'stop_recording'
+  if (action.operation === 'toggle_recording') return 'toggle_recording'
+  if (action.operation === 'start_streaming') return 'start_streaming'
+  if (action.operation === 'stop_streaming') return 'stop_streaming'
+  if (action.operation === 'toggle_streaming') return 'toggle_streaming'
+  if (action.operation === 'set_input_mute') {
+    return action.muted === false ? 'unmute_input' : 'mute_input'
+  }
+  if (action.operation === 'toggle_input_mute') return 'toggle_input_mute'
+  if (action.operation === 'set_source_visibility') {
+    return action.visible === false ? 'hide_source' : 'show_source'
+  }
+  return 'toggle_source_visibility'
 }
 
 async function selectProgram() {
@@ -112,7 +271,7 @@ async function loadObsScenes() {
       streamStatus.value = 'Nenhuma cena retornada pelo OBS.'
       return
     }
-    if (!form.value.trim()) form.value = obsScenes.value[0] ?? ''
+    if (!form.streamSceneName.trim()) form.streamSceneName = obsScenes.value[0] ?? ''
     streamStatus.value = 'Cenas carregadas do OBS.'
   } catch (cause) {
     streamStatus.value = typeof cause === 'string'
@@ -120,6 +279,53 @@ async function loadObsScenes() {
       : 'Não foi possível carregar as cenas do OBS.'
   } finally {
     isLoadingScenes.value = false
+  }
+}
+
+async function loadObsInputs() {
+  isLoadingInputs.value = true
+  streamStatus.value = ''
+  try {
+    obsInputs.value = await invoke<string[]>('list_obs_inputs')
+    if (!obsInputs.value.length) {
+      streamStatus.value = 'Nenhum input retornado pelo OBS.'
+      return
+    }
+    if (!form.streamInputName.trim()) form.streamInputName = obsInputs.value[0] ?? ''
+    streamStatus.value = 'Inputs carregados do OBS.'
+  } catch (cause) {
+    streamStatus.value = typeof cause === 'string'
+      ? cause
+      : 'Não foi possível carregar os inputs do OBS.'
+  } finally {
+    isLoadingInputs.value = false
+  }
+}
+
+async function loadObsSources() {
+  if (!form.streamSceneName.trim()) {
+    streamStatus.value = 'Escolha uma cena antes de carregar as fontes.'
+    return
+  }
+
+  isLoadingSources.value = true
+  streamStatus.value = ''
+  try {
+    obsSources.value = await invoke<string[]>('list_obs_sources_for_scene', {
+      sceneName: form.streamSceneName,
+    })
+    if (!obsSources.value.length) {
+      streamStatus.value = 'Nenhuma fonte retornada pelo OBS para esta cena.'
+      return
+    }
+    if (!form.streamSourceName.trim()) form.streamSourceName = obsSources.value[0] ?? ''
+    streamStatus.value = 'Fontes carregadas do OBS.'
+  } catch (cause) {
+    streamStatus.value = typeof cause === 'string'
+      ? cause
+      : 'Não foi possível carregar as fontes do OBS.'
+  } finally {
+    isLoadingSources.value = false
   }
 }
 
@@ -140,12 +346,45 @@ function buildAction(): MenuAction {
     return { type: 'url', url }
   }
   if (form.actionType === 'stream') {
-    return {
+    const action: MenuAction = {
       type: 'stream',
       provider: 'obs',
       operation: 'set_scene',
-      sceneName: form.value.trim(),
     }
+
+    if (
+      form.streamActionKey === 'start_recording'
+      || form.streamActionKey === 'stop_recording'
+      || form.streamActionKey === 'toggle_recording'
+      || form.streamActionKey === 'start_streaming'
+      || form.streamActionKey === 'stop_streaming'
+      || form.streamActionKey === 'toggle_streaming'
+      || form.streamActionKey === 'toggle_input_mute'
+      || form.streamActionKey === 'toggle_source_visibility'
+    ) {
+      action.operation = form.streamActionKey
+    }
+
+    if (form.streamControl === 'audio') {
+      if (form.streamActionKey === 'mute_input' || form.streamActionKey === 'unmute_input') {
+        action.operation = 'set_input_mute'
+        action.muted = form.streamActionKey === 'mute_input'
+      }
+      action.inputName = form.streamInputName.trim()
+    }
+
+    if (form.streamControl === 'source') {
+      if (form.streamActionKey === 'show_source' || form.streamActionKey === 'hide_source') {
+        action.operation = 'set_source_visibility'
+        action.visible = form.streamActionKey === 'show_source'
+      }
+      action.sceneName = form.streamSceneName.trim()
+      action.sourceName = form.streamSourceName.trim()
+    }
+
+    if (form.streamControl === 'scene') action.sceneName = form.streamSceneName.trim()
+
+    return action
   }
   return { type: 'system', target: form.systemTarget }
 }
@@ -264,23 +503,50 @@ function submit() {
             </select>
           </label>
 
+          <div class="stream-fields__wide stream-control-field">
+            <span>Controle</span>
+            <div class="stream-control-grid" role="group" aria-label="Controle OBS">
+              <button
+                v-for="control in streamControls"
+                :key="control.key"
+                type="button"
+                :class="{ 'is-active': form.streamControl === control.key }"
+                :aria-pressed="form.streamControl === control.key"
+                @click="selectStreamControl(control.key)"
+              >
+                <strong>{{ control.label }}</strong>
+                <small>{{ control.description }}</small>
+              </button>
+            </div>
+          </div>
+
           <label>
-            <span>Comando</span>
-            <select disabled>
-              <option>Trocar cena</option>
+            <span>Ação</span>
+            <select v-model="form.streamActionKey">
+              <option
+                v-for="actionOption in currentStreamActionOptions"
+                :key="actionOption.key"
+                :value="actionOption.key"
+              >
+                {{ actionOption.label }}
+              </option>
             </select>
           </label>
 
-          <label class="stream-fields__wide">
+          <label v-if="needsStreamScene" class="stream-fields__wide">
             <span>Cena do OBS</span>
             <span class="path-field">
-              <select v-model="form.value" required>
+              <select
+                v-model="form.streamSceneName"
+                required
+                @change="handleStreamSceneChange"
+              >
                 <option value="" disabled>Selecione uma cena</option>
                 <option
                   v-if="savedStreamSceneMissing"
-                  :value="form.value"
+                  :value="form.streamSceneName"
                 >
-                  Cena atual: {{ form.value }}
+                  Cena atual: {{ form.streamSceneName }}
                 </option>
                 <option
                   v-for="scene in obsScenes"
@@ -296,6 +562,64 @@ function submit() {
                 @click="loadObsScenes"
               >
                 {{ isLoadingScenes ? 'Carregando...' : 'Carregar cenas' }}
+              </button>
+            </span>
+          </label>
+
+          <label v-if="needsStreamInput" class="stream-fields__wide">
+            <span>Input de áudio</span>
+            <span class="path-field">
+              <select v-model="form.streamInputName" required>
+                <option value="" disabled>Selecione um input</option>
+                <option
+                  v-if="savedStreamInputMissing"
+                  :value="form.streamInputName"
+                >
+                  Input atual: {{ form.streamInputName }}
+                </option>
+                <option
+                  v-for="input in obsInputs"
+                  :key="input"
+                  :value="input"
+                >
+                  {{ input }}
+                </option>
+              </select>
+              <button
+                type="button"
+                :disabled="isLoadingInputs"
+                @click="loadObsInputs"
+              >
+                {{ isLoadingInputs ? 'Carregando...' : 'Carregar inputs de áudio' }}
+              </button>
+            </span>
+          </label>
+
+          <label v-if="needsStreamSource" class="stream-fields__wide">
+            <span>Fonte</span>
+            <span class="path-field">
+              <select v-model="form.streamSourceName" required>
+                <option value="" disabled>Selecione uma fonte</option>
+                <option
+                  v-if="savedStreamSourceMissing"
+                  :value="form.streamSourceName"
+                >
+                  Fonte atual: {{ form.streamSourceName }}
+                </option>
+                <option
+                  v-for="source in obsSources"
+                  :key="source"
+                  :value="source"
+                >
+                  {{ source }}
+                </option>
+              </select>
+              <button
+                type="button"
+                :disabled="isLoadingSources || !form.streamSceneName.trim()"
+                @click="loadObsSources"
+              >
+                {{ isLoadingSources ? 'Carregando...' : 'Carregar fontes' }}
               </button>
             </span>
           </label>
@@ -516,6 +840,78 @@ label > span:first-child {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 14px;
+}
+
+.stream-control-field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.stream-control-field > span {
+  color: #a5a9ba;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.stream-control-grid {
+  display: grid;
+  padding: 4px;
+  border: 1px solid rgb(255 255 255 / 8%);
+  border-radius: 11px;
+  background: #0e111d;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.stream-control-grid button {
+  display: flex;
+  min-width: 0;
+  min-height: 58px;
+  padding: 8px 9px;
+  align-items: flex-start;
+  justify-content: center;
+  flex-direction: column;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: #858a9e;
+  text-align: left;
+  background: transparent;
+  cursor: pointer;
+  gap: 4px;
+}
+
+.stream-control-grid button:hover {
+  color: #cbc7ec;
+  background: rgb(139 124 255 / 6%);
+}
+
+.stream-control-grid button.is-active {
+  border-color: rgb(139 124 255 / 45%);
+  color: #e7e5fa;
+  background: linear-gradient(135deg, rgb(121 107 234 / 20%), rgb(95 81 208 / 10%));
+  box-shadow: 0 4px 14px rgb(38 31 91 / 18%);
+}
+
+.stream-control-grid strong,
+.stream-control-grid small {
+  overflow: hidden;
+  max-width: 100%;
+  text-overflow: ellipsis;
+}
+
+.stream-control-grid strong {
+  font-size: 10px;
+}
+
+.stream-control-grid small {
+  color: #6f7488;
+  font-size: 8px;
+  line-height: 1.25;
+}
+
+.stream-control-grid button.is-active small {
+  color: #9791c8;
 }
 
 .stream-fields__wide,

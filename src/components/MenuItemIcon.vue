@@ -4,17 +4,19 @@ import {
   fallbackTextForItem,
   fixedIconForItem,
   resolveProgramIcon,
+  type FixedIconKind,
   type ProgramIconPayload,
 } from '../composables/useResolvedMenuIcon'
 import type { MenuItem } from '../types/menu'
 
 const props = defineProps<{
   item: MenuItem
+  fixedIconOverride?: FixedIconKind | null
 }>()
 
 const programIcon = ref<ProgramIconPayload | null>(null)
 const canvas = ref<HTMLCanvasElement | null>(null)
-const fixedIcon = computed(() => fixedIconForItem(props.item))
+const fixedIcon = computed(() => props.fixedIconOverride ?? fixedIconForItem(props.item))
 const fallbackText = computed(() => fallbackTextForItem(props.item))
 
 watch(
@@ -90,6 +92,21 @@ watch(programIcon, async (icon) => {
       <circle cx="12" cy="12" r="2.4" />
       <path d="M8.5 8.5a5 5 0 0 0 0 7M15.5 8.5a5 5 0 0 1 0 7" />
       <path d="M5.5 5.5a9.2 9.2 0 0 0 0 13M18.5 5.5a9.2 9.2 0 0 1 0 13" />
+    </template>
+    <template v-else-if="fixedIcon === 'mic' || fixedIcon === 'mic-muted'">
+      <path d="M12 14.5a3 3 0 0 0 3-3v-5a3 3 0 0 0-6 0v5a3 3 0 0 0 3 3z" />
+      <path d="M6.5 10.5v1a5.5 5.5 0 0 0 11 0v-1M12 17v3M9 20h6" />
+      <path v-if="fixedIcon === 'mic-muted'" d="M4.5 4.5 19.5 19.5" />
+    </template>
+    <template v-else-if="fixedIcon === 'speaker' || fixedIcon === 'speaker-muted'">
+      <path d="M4 9.5v5h4l5 4v-13l-5 4z" />
+      <path v-if="fixedIcon === 'speaker'" d="M16 9a4.5 4.5 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11" />
+      <path v-else d="m16 10 5 5M21 10l-5 5" />
+    </template>
+    <template v-else-if="fixedIcon === 'audio' || fixedIcon === 'audio-muted'">
+      <path d="M5 10v4h3l4 3.2V6.8L8 10z" />
+      <path d="M16.5 8.5a5 5 0 0 1 0 7" />
+      <path v-if="fixedIcon === 'audio-muted'" d="M4.5 4.5 19.5 19.5" />
     </template>
     <template v-else>
       <rect x="3" y="3" width="7" height="7" rx="1.5" />

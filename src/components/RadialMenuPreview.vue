@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import type { MenuItem } from '../types/menu'
+import { itemStreamToggleState } from '../composables/useObsStreamStatus'
+import type { MenuItem, ObsStreamStatus } from '../types/menu'
 import MenuItemIcon from './MenuItemIcon.vue'
 
 const props = defineProps<{
@@ -9,6 +10,7 @@ const props = defineProps<{
   maxItems: number
   groupLabel: string | null
   menuSize: number
+  obsStreamStatus?: ObsStreamStatus | null
 }>()
 
 const emit = defineEmits<{
@@ -137,6 +139,19 @@ function activateItem(item: MenuItem) {
     emit('select', item.id)
   }
 }
+
+function itemHint(item: MenuItem) {
+  return itemStreamToggleState(item, props.obsStreamStatus ?? null)?.hint ?? item.hint
+}
+
+function itemStreamState(item: MenuItem) {
+  return itemStreamToggleState(item, props.obsStreamStatus ?? null)
+}
+
+function showStreamLed(item: MenuItem) {
+  const state = itemStreamState(item)
+  return Boolean(state?.active || state?.showInactiveLed)
+}
 </script>
 
 <template>
@@ -161,18 +176,25 @@ function activateItem(item: MenuItem) {
         :class="{
           'is-selected': item.id === selectedId,
           'is-dragging': item.id === draggingId,
+          'has-stream-status': itemStreamState(item),
+          'is-stream-active': itemStreamState(item)?.active,
         }"
         :style="itemPosition(index)"
         :aria-label="`Selecionar ${item.label}`"
-        :title="`${item.label} — ${item.hint}`"
+        :title="`${item.label} — ${itemHint(item)}`"
         @click="activateItem(item)"
         @pointerdown="startDrag($event, item, index)"
         @pointermove="moveDrag"
         @pointerup="finishDrag"
         @pointercancel="finishDrag"
       >
+        <i
+          v-if="showStreamLed(item)"
+          class="preview-item__stream-led"
+          aria-hidden="true"
+        />
         <span>
-          <MenuItemIcon :item="item" />
+          <MenuItemIcon :item="item" :fixed-icon-override="itemStreamState(item)?.icon" />
         </span>
       </button>
 
@@ -213,7 +235,7 @@ function activateItem(item: MenuItem) {
       <div>
         <span class="preview-card__dot" :style="{ background: selectedItem?.accent }" />
         <strong>{{ selectedItem?.label ?? (items.length ? 'Nenhum item selecionado' : 'Menu vazio') }}</strong>
-        <small v-if="selectedItem">{{ selectedItem.hint }}</small>
+        <small v-if="selectedItem">{{ itemHint(selectedItem) }}</small>
       </div>
       <button
         type="button"
@@ -344,6 +366,29 @@ h2 {
   background: color-mix(in srgb, var(--preview-accent) 12%, transparent);
   font-size: 13px;
   font-weight: 700;
+}
+
+.preview-item__stream-led {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 6px;
+  height: 6px;
+  border: 1px solid rgb(255 255 255 / 14%);
+  border-radius: 50%;
+  background: rgb(255 255 255 / 13%);
+  box-shadow: inset 0 1px 1px rgb(255 255 255 / 12%);
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.preview-item.is-stream-active .preview-item__stream-led {
+  border-color: rgb(255 134 154 / 72%);
+  background: #ff3858;
+  box-shadow:
+    0 0 0 3px rgb(255 56 88 / 9%),
+    0 0 10px rgb(255 56 88 / 68%);
+  opacity: 1;
 }
 
 .preview-item:hover,

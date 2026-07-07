@@ -4,9 +4,11 @@ import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import RadialMenu from './components/RadialMenu.vue'
 import { useMenuActions } from './composables/useMenuActions'
+import { useObsStreamStatus } from './composables/useObsStreamStatus'
 import { useSystemStats } from './composables/useSystemStats'
 import type {
   CenterAction,
+  MenuAction,
   MenuConfig,
   MenuItem,
   PreferencesLoadResponse,
@@ -25,6 +27,11 @@ const centerAction = computed<CenterAction>(() =>
   navigationStack.value.length ? 'back' : 'close',
 )
 const { execute, isExecuting, error } = useMenuActions()
+const {
+  status: obsStreamStatus,
+  refresh: refreshObsStreamStatus,
+  clear: clearObsStreamStatus,
+} = useObsStreamStatus()
 const { stats, start: startStats, stop: stopStats } = useSystemStats()
 const unlisteners: UnlistenFn[] = []
 let hideTimer: number | undefined
@@ -32,6 +39,10 @@ let hideTimer: number | undefined
 function showAnimation() {
   window.clearTimeout(hideTimer)
   navigationStack.value = []
+  clearObsStreamStatus()
+  if (hasStreamToggle(menuConfig.value.items)) {
+    void refreshObsStreamStatus(obsToggleInputNames(menuConfig.value.items))
+  }
   startStats()
   phase.value = 'entering'
   requestAnimationFrame(() => {
@@ -39,6 +50,67 @@ function showAnimation() {
       phase.value = 'visible'
     })
   })
+}
+
+function hasStreamToggle(items: MenuItem[]): boolean {
+  return items.some((item) => {
+    if (item.action.type === 'group') return hasStreamToggle(item.action.items)
+    return item.action.type === 'stream'
+      && (item.action.operation === 'toggle_recording'
+        || item.action.operation === 'toggle_streaming'
+        || item.action.operation === 'toggle_input_mute')
+  })
+}
+
+function obsToggleInputNames(items: MenuItem[]): string[] {
+  return items.flatMap((item) => {
+    if (item.action.type === 'group') return obsToggleInputNames(item.action.items)
+    if (
+      item.action.type === 'stream'
+      && item.action.operation === 'toggle_input_mute'
+      && item.action.inputName?.trim()
+    ) {
+      return [item.action.inputName.trim()]
+    }
+    return []
+  })
+}
+
+function isObsToggleAction(action: MenuAction) {
+  return action.type === 'stream'
+    && (action.operation === 'toggle_recording'
+      || action.operation === 'toggle_streaming'
+      || action.operation === 'toggle_input_mute')
+}
+
+function applySuccessfulStreamToggle(action: MenuAction) {
+  if (action.type !== 'stream' || !obsStreamStatus.value) return
+
+  if (action.operation === 'toggle_recording') {
+    obsStreamStatus.value = {
+      ...obsStreamStatus.value,
+      recording: { active: !obsStreamStatus.value.recording.active },
+    }
+  }
+
+  if (action.operation === 'toggle_streaming') {
+    obsStreamStatus.value = {
+      ...obsStreamStatus.value,
+      streaming: { active: !obsStreamStatus.value.streaming.active },
+    }
+  }
+
+  if (action.operation === 'toggle_input_mute' && action.inputName?.trim()) {
+    const inputName = action.inputName.trim()
+    const current = obsStreamStatus.value.inputMutes[inputName] ?? false
+    obsStreamStatus.value = {
+      ...obsStreamStatus.value,
+      inputMutes: {
+        ...obsStreamStatus.value.inputMutes,
+        [inputName]: !current,
+      },
+    }
+  }
 }
 
 function dismiss() {
@@ -59,6 +131,10 @@ async function selectItem(item: MenuItem) {
 
   try {
     await execute(item.action)
+    if (isObsToggleAction(item.action)) {
+      applySuccessfulStreamToggle(item.action)
+      void refreshObsStreamStatus(obsToggleInputNames(menuConfig.value.items))
+    }
     dismiss()
   } catch {
     window.setTimeout(() => {
@@ -142,6 +218,7 @@ onBeforeUnmount(() => {
       :center-action="centerAction"
       :level-key="currentGroup?.id ?? 'main'"
       :menu-size="menuConfig.radialMenuSize"
+      :obs-stream-status="obsStreamStatus"
       @select="selectItem"
       @dismiss="dismiss"
       @center-action="handleCenterAction"
