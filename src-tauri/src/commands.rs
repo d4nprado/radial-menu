@@ -597,6 +597,10 @@ pub fn extract_program_icon(path: String) -> Result<Option<ProgramIcon>, String>
 fn extract_program_icon_native(path: &Path) -> Result<Option<ProgramIcon>, String> {
     use std::os::windows::ffi::OsStrExt;
 
+    if let Some(icon) = extract_shell_item_icon(path)? {
+        return Ok(Some(icon));
+    }
+
     let wide_path: Vec<u16> = path.as_os_str().encode_wide().chain(Some(0)).collect();
     let mut icon = HICON::default();
     let extracted =
@@ -610,6 +614,34 @@ fn extract_program_icon_native(path: &Path) -> Result<Option<ProgramIcon>, Strin
         let _ = DestroyIcon(icon);
     }
     result.map(Some)
+}
+
+#[cfg(target_os = "windows")]
+fn extract_shell_item_icon(path: &Path) -> Result<Option<ProgramIcon>, String> {
+    use std::os::windows::ffi::OsStrExt;
+
+    let wide_path: Vec<u16> = path.as_os_str().encode_wide().chain(Some(0)).collect();
+    let image_factory = unsafe {
+        SHCreateItemFromParsingName::<_, _, IShellItemImageFactory>(
+            PCWSTR(wide_path.as_ptr()),
+            None,
+        )
+    };
+    let Ok(image_factory) = image_factory else {
+        return Ok(None);
+    };
+
+    let bitmap = unsafe {
+        image_factory.GetImage(
+            SIZE { cx: 48, cy: 48 },
+            SIIGBF_RESIZETOFIT | SIIGBF_BIGGERSIZEOK | SIIGBF_ICONONLY,
+        )
+    };
+    let Ok(bitmap) = bitmap else {
+        return Ok(None);
+    };
+
+    hbitmap_to_rgba(bitmap).map(Some)
 }
 
 #[cfg(target_os = "windows")]
