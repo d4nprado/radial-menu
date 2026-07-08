@@ -140,6 +140,8 @@ pub fn run() {
             commands::execute_system_action,
             config::load_launcher_config,
             config::save_launcher_config,
+            config::export_launcher_config,
+            config::import_launcher_config,
             config::get_config_path,
             config::open_config_directory,
             config::get_app_preferences,

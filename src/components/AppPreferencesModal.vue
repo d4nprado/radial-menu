@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { invoke } from '@tauri-apps/api/core'
+import { open, save } from '@tauri-apps/plugin-dialog'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type {
   AppPreferences,
   ObsConnectionStatus,
@@ -11,7 +12,8 @@ import type {
 } from '../types/menu'
 
 const DEFAULT_SHORTCUT = 'Ctrl+Space'
-const emit = defineEmits<{ close: [] }>()
+const OBS_REQUIRED_MESSAGE = 'Preencha host, porta e senha do OBS WebSocket.'
+const emit = defineEmits<{ close: []; imported: [] }>()
 
 function defaultPreferences(): AppPreferences {
   return {
@@ -42,6 +44,7 @@ const message = ref('')
 const isError = ref(false)
 const obsStatus = ref('Não testado')
 const obsStatusOk = ref(false)
+const testedObsSignature = ref<string | null>(null)
 const unlisteners: UnlistenFn[] = []
 
 const draftValue = computed(() =>
@@ -58,11 +61,39 @@ const shortcutChanged = computed(() =>
   shortcutType.value !== preferences.value.openMenuShortcut.type
   || draftValue.value !== preferences.value.openMenuShortcut.value,
 )
+const obsSignature = computed(() => normalizedObsSignature())
+const obsRequiredFilled = computed(() => Boolean(obsSignature.value))
 
 function showMessage(text: string, error = false) {
   message.value = text
   isError.value = error
 }
+
+function normalizedObsSignature() {
+  const host = streamPreferences.value.obs.host.trim()
+  const port = Number(streamPreferences.value.obs.port)
+  const password = streamPreferences.value.obs.password.trim()
+  if (!host || !Number.isInteger(port) || port < 1 || port > 65535 || !password) {
+    return ''
+  }
+  return JSON.stringify({ host, port, password })
+}
+
+function validateObsForm() {
+  if (obsRequiredFilled.value) return true
+  obsStatusOk.value = false
+  obsStatus.value = OBS_REQUIRED_MESSAGE
+  showMessage(OBS_REQUIRED_MESSAGE, true)
+  return false
+}
+
+watch(obsSignature, (current) => {
+  if (!testedObsSignature.value || !obsStatusOk.value || current === testedObsSignature.value) {
+    return
+  }
+  obsStatusOk.value = false
+  obsStatus.value = 'Conexão ainda não testada'
+})
 
 async function load() {
   busy.value = true
@@ -123,13 +154,19 @@ async function loadStreamPreferences() {
 }
 
 async function saveStreamPreferences() {
+  if (!validateObsForm()) return
+
   busy.value = true
-  obsStatusOk.value = false
-  obsStatus.value = 'Não testado'
   try {
     await invoke('save_stream_preferences', {
       preferences: streamPreferences.value,
     })
+    if (obsSignature.value === testedObsSignature.value) {
+      obsStatusOk.value = true
+      obsStatus.value = 'Conexão com OBS Studio realizada.'
+    } else if (!obsStatusOk.value) {
+      obsStatus.value = 'Conexão ainda não testada'
+    }
     showMessage('Preferências Stream salvas.')
   } catch (cause) {
     showMessage(
@@ -144,6 +181,8 @@ async function saveStreamPreferences() {
 }
 
 async function testObsConnection() {
+  if (!validateObsForm()) return
+
   busy.value = true
   obsStatusOk.value = false
   obsStatus.value = 'Testando...'
@@ -154,12 +193,61 @@ async function testObsConnection() {
     const status = await invoke<ObsConnectionStatus>('test_obs_connection')
     obsStatusOk.value = status.ok
     obsStatus.value = status.message
+    testedObsSignature.value = status.ok ? obsSignature.value : null
     showMessage(status.message, !status.ok)
   } catch (cause) {
+    testedObsSignature.value = null
     obsStatus.value = typeof cause === 'string'
       ? cause
       : 'Não foi possível conectar ao OBS Studio.'
     showMessage(obsStatus.value, true)
+  } finally {
+    busy.value = false
+  }
+}
+
+async function exportLauncherConfig() {
+  try {
+    const destination = await save({
+      title: 'Exportar configurações',
+      defaultPath: 'launcher-config.json',
+      filters: [{ name: 'JSON', extensions: ['json'] }],
+    })
+    if (!destination) return
+
+    busy.value = true
+    await invoke('export_launcher_config', { destination })
+    showMessage('Configurações exportadas.')
+  } catch (cause) {
+    showMessage(
+      typeof cause === 'string' ? cause : 'Não foi possível exportar as configurações.',
+      true,
+    )
+  } finally {
+    busy.value = false
+  }
+}
+
+async function importLauncherConfig() {
+  try {
+    const source = await open({
+      title: 'Importar configurações',
+      multiple: false,
+      filters: [{ name: 'JSON', extensions: ['json'] }],
+    })
+    if (!source || Array.isArray(source)) return
+
+    busy.value = true
+    await invoke('import_launcher_config', { source })
+    emit('imported')
+    showMessage('Configurações importadas e aplicadas.')
+  } catch (cause) {
+    showMessage(
+      typeof cause === 'string'
+        ? cause
+        : 'O arquivo JSON é inválido ou incompatível. A configuração atual foi mantida.',
+      true,
+    )
   } finally {
     busy.value = false
   }
@@ -311,6 +399,7 @@ async function restoreDefaults() {
     streamPreferences.value = defaultStreamPreferences()
     obsStatus.value = 'Não testado'
     obsStatusOk.value = false
+    testedObsSignature.value = null
     shortcutType.value = 'keyboard'
     keyboardShortcut.value = DEFAULT_SHORTCUT
     mouseShortcut.value = 'Mouse4'
@@ -474,7 +563,6 @@ onBeforeUnmount(() => {
                   :disabled="busy"
                   type="password"
                   autocomplete="off"
-                  placeholder="Opcional"
                 >
               </label>
             </div>
@@ -490,6 +578,21 @@ onBeforeUnmount(() => {
                 {{ obsStatus }}
               </span>
             </div>
+          </div>
+        </section>
+
+        <section class="backup-section">
+          <div class="section-heading">
+            <span>BACKUP DE CONFIGURAÇÕES</span>
+          </div>
+
+          <div class="backup-actions">
+            <button type="button" :disabled="busy" @click="exportLauncherConfig">
+              Exportar configurações
+            </button>
+            <button type="button" :disabled="busy" @click="importLauncherConfig">
+              Importar configurações
+            </button>
           </div>
         </section>
 
@@ -552,6 +655,28 @@ onBeforeUnmount(() => {
   border-radius: 9px;
   color: #bfc2d0;
   background: transparent;
+  cursor: pointer;
+}
+
+.backup-section {
+  padding: 19px 0;
+  border-bottom: 1px solid #ffffff12;
+}
+
+.backup-actions {
+  display: flex;
+  margin-top: 11px;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.backup-actions button {
+  padding: 8px 11px;
+  border: 1px solid #8b7cff3d;
+  border-radius: 8px;
+  color: #bcb6ff;
+  background: #8b7cff14;
   cursor: pointer;
 }
 </style>

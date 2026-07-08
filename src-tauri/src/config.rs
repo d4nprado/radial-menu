@@ -370,6 +370,44 @@ pub fn save_launcher_config(app: tauri::AppHandle, config: LauncherConfig) -> Re
     })
 }
 
+#[tauri::command]
+pub fn export_launcher_config(app: tauri::AppHandle, destination: String) -> Result<(), String> {
+    let source = launcher_config_path(&app)?;
+    if !source.exists() {
+        write_json(&source, &empty_launcher_config())?;
+    }
+
+    let destination = PathBuf::from(destination);
+    if destination.is_dir() {
+        return Err("Escolha um arquivo JSON para exportar as configurações.".into());
+    }
+    fs::copy(&source, &destination)
+        .map(|_| ())
+        .map_err(|error| config_error("Não foi possível exportar as configurações", error))
+}
+
+#[tauri::command]
+pub fn import_launcher_config(app: tauri::AppHandle, source: String) -> Result<(), String> {
+    let source = PathBuf::from(source);
+    if !source.is_file() {
+        return Err("Escolha um arquivo JSON válido para importar.".into());
+    }
+
+    let contents = fs::read_to_string(&source)
+        .map_err(|error| config_error("Não foi possível ler o arquivo importado", error))?;
+    let mut config = serde_json::from_str::<LauncherConfig>(&contents)
+        .map_err(|error| config_error("O JSON importado não é compatível", error))?;
+    normalize_launcher_config(&mut config)?;
+    validate_launcher_config(&config)?;
+    write_json(&launcher_config_path(&app)?, &config)?;
+    app.emit(CONFIG_UPDATED_EVENT, config).map_err(|error| {
+        config_error(
+            "A configuração foi importada, mas o menu não foi atualizado",
+            error,
+        )
+    })
+}
+
 fn normalize_action_urls(items: &mut [LauncherMenuItem]) -> Result<(), String> {
     for item in items {
         match &mut item.action {
