@@ -367,7 +367,11 @@ onMounted(loadConfig)
       @cancel="closeForm"
     />
 
-    <AppPreferencesModal v-if="showPreferences" @close="showPreferences = false" />
+    <AppPreferencesModal
+      v-if="showPreferences"
+      @close="showPreferences = false"
+      @imported="loadConfig"
+    />
   </main>
 </template>
 

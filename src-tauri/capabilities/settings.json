@@ -5,6 +5,7 @@
   "windows": ["settings"],
   "permissions": [
     "dialog:allow-open",
+    "dialog:allow-save",
     "core:event:allow-listen",
     "core:event:allow-unlisten"
   ]
